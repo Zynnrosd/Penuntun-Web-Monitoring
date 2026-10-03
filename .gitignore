@@ -1,0 +1,52 @@
+# .gitignore
+
+# =========================
+# Dependencies
+# =========================
+**/node_modules/
+
+# =========================
+# Build
+# =========================
+**/.next/
+**/dist/
+**/build/
+
+# Local auth test
+backend/src/test-auth.ts
+
+# =========================
+# Environment / Secrets
+# Jangan commit file ENV apa pun
+# =========================
+**/.env
+**/.env.*
+
+# =========================
+# Logs
+# =========================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# AI / Local Project Instructions
+# =========================
+Prd.md
+GEMINI.md
+Designbrief.md
+CLAUDE.md
+AGENTS.md
+architecture.md
+
+.gemini/
+.claude/
+.agents/
+.impeccable/
