@@ -1,0 +1,21 @@
+node_modules/
+
+.next/
+
+dist/
+
+frontend/.env.local
+
+backend/.env
+backend/.env.example
+
+.DS_Store
+
+*.log
+
+# local project instructions
+Prd.md
+Designbrief.md
+architecture.md
+
+.impeccable/

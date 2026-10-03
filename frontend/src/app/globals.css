@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #1B3A5C;
+  --color-primary-hover: #14293F;
+  --color-primary-soft: #E6EDF3;
+  --color-secondary: #1E2E4D;
+  --color-secondary-soft: #E8ECF3;
+  --color-success: #2F8F5B;
+  --color-success-soft: #E4F3EA;
+  --color-warning: #C97A2B;
+  --color-warning-soft: #FBEEE0;
+  --color-danger: #C6362F;
+  --color-danger-soft: #FBE8E6;
+  --color-neutral-status: #8A94A6;
+  --color-offline: #8A94A6;
+  --color-background: #F3F5F8;
+  --color-surface: #FFFFFF;
+  --color-surface-sunken: #EDF0F4;
+  --color-border: #DCE2E9;
+  --color-border-strong: #B9C2CE;
+  --color-text-primary: #17212B;
+  --color-text-secondary: #5B6B7C;
+  --color-on-dark: #F5F7FA;
+
+  --radius-input: 6px;
+  --radius-card: 10px;
+  --radius-pill: 999px;
+  --radius-map: 14px;
+  --radius-modal: 12px;
+
+  --shadow-card: 0 1px 2px rgba(23,33,43,0.06), 0 1px 1px rgba(23,33,43,0.04);
+  --shadow-modal: 0 12px 32px rgba(23,33,43,0.18);
+}
+
+body {
+  margin: 0;
+}
+
+/* ============================================================
+   ANIMASI
+   Dipakai hanya untuk: indikator live (radar, pulse), elemen
+   mengambang di hero/landing, dan transisi masuk form auth.
+   Jangan dipakai sebagai hover-effect generik di semua kartu.
+   ============================================================ */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes radar-ping {
+  0% { transform: scale(0.5); opacity: 0.5; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-float { animation: float 4s ease-in-out infinite; }
+.animate-radar { animation: radar-ping 2.5s ease-out infinite; }
+.animate-fade-up { animation: fade-up 0.6s ease-out both; }
+
+/* ============================================================
+   TEKSTUR
+   Dot-grid tipis untuk halaman auth dan landing (pengganti area
+   kosong polos), bukan dekorasi di semua halaman dashboard.
+   ============================================================ */
+
+.bg-dot-dark {
+  background-image: radial-gradient(circle, rgba(255,255,255,0.12) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.bg-dot-light {
+  background-image: radial-gradient(circle, rgba(27,58,92,0.1) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* ============================================================
+   BLOB SHAPE
+   Bentuk organik untuk latar hero, bingkai ikon fitur, dan
+   bingkai foto di landing page — gaya "Sierra" (Colorlib),
+   disesuaikan ke palet navy/primary/success PENUNTUN.
+   ============================================================ */
+
+.blob-shape {
+  border-radius: 58% 42% 65% 35% / 45% 55% 45% 55%;
+}
+.blob-shape-2 {
+  border-radius: 42% 58% 35% 65% / 55% 45% 55% 45%;
+}
