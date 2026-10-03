@@ -1,104 +1,270 @@
-// backend/src/routes/gps.routes.ts
-
 import { Router } from "express";
-import { z } from "zod";
 import { supabase } from "../lib/supabase";
 
 const router = Router();
 
-const locationSchema = z.object({
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  accuracy: z.number().nonnegative().nullable().optional(),
-});
 
-router.post("/location", async (req, res) => {
-  const deviceId = req.header("x-device-id");
-  const gpsToken = req.header("x-gps-token");
+// =========================================================
+// UPDATE GPS DARI BROWSER / HP
+// POST /gps/:id/update
+// =========================================================
 
-  if (!deviceId || !gpsToken) {
-    return res.status(401).json({
-      message: "Identitas GPS tidak lengkap",
-    });
+router.post(
+  "/:id/update",
+  async (req, res) => {
+    try {
+      const idPerangkat =
+        req.params.id;
+
+      const {
+        latitude,
+        longitude,
+        accuracy,
+        recorded_at,
+      } = req.body;
+
+
+      // ===================================================
+      // VALIDASI
+      // ===================================================
+
+      if (
+        typeof latitude !== "number" ||
+        !Number.isFinite(latitude) ||
+        latitude < -90 ||
+        latitude > 90
+      ) {
+        return res.status(400).json({
+          message:
+            "Latitude tidak valid.",
+        });
+      }
+
+
+      if (
+        typeof longitude !== "number" ||
+        !Number.isFinite(longitude) ||
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        return res.status(400).json({
+          message:
+            "Longitude tidak valid.",
+        });
+      }
+
+
+      // ===================================================
+      // CEK PERANGKAT
+      // ===================================================
+
+      const {
+        data: perangkat,
+        error: cekError,
+      } = await supabase
+        .from("perangkat")
+        .select(
+          "id_perangkat"
+        )
+        .eq(
+          "id_perangkat",
+          idPerangkat
+        )
+        .maybeSingle();
+
+
+      if (cekError) {
+        console.error(
+          "[GPS] Gagal cek perangkat:",
+          cekError
+        );
+
+        return res.status(500).json({
+          message:
+            "Gagal memeriksa perangkat.",
+        });
+      }
+
+
+      if (!perangkat) {
+        return res.status(404).json({
+          message:
+            "Perangkat tidak ditemukan.",
+        });
+      }
+
+
+      // ===================================================
+      // UPDATE POSISI TERAKHIR
+      // ===================================================
+
+      const {
+        error: updateError,
+      } = await supabase
+        .from("perangkat")
+        .update({
+          lat_terakhir:
+            latitude,
+
+          long_terakhir:
+            longitude,
+        })
+        .eq(
+          "id_perangkat",
+          idPerangkat
+        );
+
+
+      if (updateError) {
+        console.error(
+          "[GPS] Gagal update perangkat:",
+          updateError
+        );
+
+        return res.status(500).json({
+          message:
+            "Gagal memperbarui lokasi perangkat.",
+        });
+      }
+
+
+      // ===================================================
+      // SIMPAN RIWAYAT
+      // ===================================================
+
+      const trackingPayload: {
+        id_perangkat: string;
+        latitude: number;
+        longitude: number;
+        baterai: null;
+        recorded_at?: string;
+      } = {
+        id_perangkat:
+          idPerangkat,
+
+        latitude,
+
+        longitude,
+
+        baterai:
+          null,
+      };
+
+
+      if (
+        typeof recorded_at === "string" &&
+        recorded_at.length > 0
+      ) {
+        trackingPayload.recorded_at =
+          recorded_at;
+      }
+
+
+      const {
+        error: trackingError,
+      } = await supabase
+        .from("tracking_data")
+        .insert(
+          trackingPayload
+        );
+
+
+      if (trackingError) {
+        console.error(
+          "[GPS] Gagal menyimpan tracking:",
+          trackingError
+        );
+
+        return res.status(500).json({
+          message:
+            "Lokasi diperbarui tetapi riwayat gagal disimpan.",
+        });
+      }
+
+
+      // ===================================================
+      // LOG
+      // ===================================================
+
+      console.log("");
+      console.log(
+        "========================================"
+      );
+
+      console.log(
+        "[GPS BROWSER]"
+      );
+
+      console.log(
+        "========================================"
+      );
+
+      console.log(
+        `Perangkat : ${idPerangkat}`
+      );
+
+      console.log(
+        `Latitude  : ${latitude}`
+      );
+
+      console.log(
+        `Longitude : ${longitude}`
+      );
+
+
+      if (
+        typeof accuracy === "number"
+      ) {
+        console.log(
+          `Akurasi   : ±${accuracy.toFixed(1)} m`
+        );
+      }
+
+
+      console.log(
+        "========================================"
+      );
+
+
+      // ===================================================
+      // RESPONSE
+      // ===================================================
+
+      return res.json({
+        success: true,
+
+        message:
+          "Lokasi berhasil diperbarui.",
+
+        data: {
+          id_perangkat:
+            idPerangkat,
+
+          latitude,
+
+          longitude,
+
+          accuracy:
+            typeof accuracy === "number"
+              ? accuracy
+              : null,
+        },
+      });
+
+    } catch (error) {
+      console.error(
+        "[GPS] Error:",
+        error
+      );
+
+
+      return res.status(500).json({
+        message:
+          "Terjadi kesalahan saat memproses GPS.",
+      });
+    }
   }
+);
 
-  const { data: perangkat, error: perangkatError } =
-    await supabase
-      .from("perangkat")
-      .select("id_perangkat, gps_token")
-      .eq("id_perangkat", deviceId)
-      .single();
-
-  if (perangkatError || !perangkat) {
-    return res.status(401).json({
-      message: "Perangkat tidak ditemukan",
-    });
-  }
-
-  if (perangkat.gps_token !== gpsToken) {
-    return res.status(401).json({
-      message: "Token GPS tidak valid",
-    });
-  }
-
-  const parsed = locationSchema.safeParse(req.body);
-
-  if (!parsed.success) {
-    return res.status(400).json({
-      message: "Data lokasi tidak valid",
-    });
-  }
-
-  const {
-    latitude,
-    longitude,
-    accuracy,
-  } = parsed.data;
-
-  const waktu = new Date().toISOString();
-
-  const { error: updateError } = await supabase
-    .from("perangkat")
-    .update({
-      lat_terakhir: latitude,
-      long_terakhir: longitude,
-      gps_accuracy: accuracy ?? null,
-      location_updated_at: waktu,
-    })
-    .eq("id_perangkat", deviceId);
-
-  if (updateError) {
-    return res.status(500).json({
-      message: updateError.message,
-    });
-  }
-
-  const { error: historyError } = await supabase
-    .from("lokasi_perangkat")
-    .insert({
-      id_perangkat: deviceId,
-      latitude,
-      longitude,
-      accuracy: accuracy ?? null,
-      source: "PHONE",
-      recorded_at: waktu,
-    });
-
-  if (historyError) {
-    return res.status(500).json({
-      message: historyError.message,
-    });
-  }
-
-  console.log(
-    `[GPS PHONE] ${deviceId} | ${latitude}, ${longitude}`
-  );
-
-  return res.status(200).json({
-    success: true,
-    message: "Lokasi berhasil diperbarui",
-    location_updated_at: waktu,
-  });
-});
 
 export default router;
