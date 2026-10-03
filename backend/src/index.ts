@@ -13,9 +13,17 @@ import pengaturanRoutes from "./routes/pengaturan.routes";
 import deviceRoutes from "./routes/device.routes";
 import gpsRoutes from "./routes/gps.routes";
 import geofenceRoutes from "./routes/geofence.routes";
+
 import { startDeviceStatusMonitor } from "./services/device-status.service";
+import { mulaiMqttListener } from "./mqtt/listener";
+
 
 const app = express();
+
+
+// =========================================================
+// MIDDLEWARE
+// =========================================================
 
 app.use(
   cors({
@@ -26,7 +34,11 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/geofence", geofenceRoutes);
+
+
+// =========================================================
+// REQUEST LOGGER
+// =========================================================
 
 app.use((req, _res, next) => {
   console.log(
@@ -36,6 +48,11 @@ app.use((req, _res, next) => {
   next();
 });
 
+
+// =========================================================
+// ROOT
+// =========================================================
+
 app.get("/", (_req, res) => {
   res.status(200).json({
     success: true,
@@ -43,6 +60,11 @@ app.get("/", (_req, res) => {
     service: "PENUNTUN Backend",
   });
 });
+
+
+// =========================================================
+// HEALTH CHECK
+// =========================================================
 
 app.get("/health", (_req, res) => {
   res.status(200).json({
@@ -52,14 +74,31 @@ app.get("/health", (_req, res) => {
   });
 });
 
+
+// =========================================================
+// ROUTES
+// =========================================================
+
 app.use("/auth", authRoutes);
+
 app.use("/perangkat", perangkatRoutes);
+
 app.use("/pengguna", penggunaRoutes);
+
 app.use("/notifikasi", notifikasiRoutes);
+
 app.use("/pengaturan", pengaturanRoutes);
 
 app.use("/device", deviceRoutes);
+
 app.use("/gps", gpsRoutes);
+
+app.use("/geofence", geofenceRoutes);
+
+
+// =========================================================
+// 404 HANDLER
+// =========================================================
 
 app.use((req, res) => {
   res.status(404).json({
@@ -70,6 +109,11 @@ app.use((req, res) => {
   });
 });
 
+
+// =========================================================
+// GLOBAL ERROR HANDLER
+// =========================================================
+
 app.use(
   (
     err: Error,
@@ -77,7 +121,10 @@ app.use(
     res: express.Response,
     _next: express.NextFunction
   ) => {
-    console.error("[PENUNTUN API ERROR]", err);
+    console.error(
+      "[PENUNTUN API ERROR]",
+      err
+    );
 
     res.status(500).json({
       success: false,
@@ -86,7 +133,14 @@ app.use(
   }
 );
 
-const PORT = Number(process.env.PORT) || 4000;
+
+// =========================================================
+// SERVER
+// =========================================================
+
+const PORT =
+  Number(process.env.PORT) || 4000;
+
 
 app.listen(PORT, () => {
   console.log("");
@@ -98,5 +152,42 @@ app.listen(PORT, () => {
   console.log("========================================");
   console.log("");
 
-  startDeviceStatusMonitor();
+
+  // =======================================================
+  // DEVICE STATUS MONITOR
+  // =======================================================
+
+  try {
+    startDeviceStatusMonitor();
+
+    console.log(
+      "[DEVICE] Device status monitor aktif."
+    );
+  } catch (error) {
+    console.error(
+      "[DEVICE] Gagal menjalankan device status monitor:",
+      error
+    );
+  }
+
+
+  // =======================================================
+  // MQTT LISTENER
+  // =======================================================
+
+  try {
+    mulaiMqttListener();
+
+    console.log(
+      "[MQTT] Listener MQTT dijalankan."
+    );
+  } catch (error) {
+    console.error(
+      "[MQTT] Gagal menjalankan listener MQTT:",
+      error
+    );
+  }
+
+
+  console.log("");
 });
