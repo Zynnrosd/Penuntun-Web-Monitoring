@@ -11,6 +11,11 @@
     "dev": "concurrently -n BACKEND,FRONTEND \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\""
   },
   "devDependencies": {
-    "concurrently": "^10.0.5"
+    "@types/node": "^26.6.4",
+    "concurrently": "^10.0.5",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.5"
   }
 }
