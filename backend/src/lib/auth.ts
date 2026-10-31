@@ -21,7 +21,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   const klien = supabaseSebagai(token);
 
-  const { data: auth, error: authError } = await klien.auth.getUser();
+  const { data: auth, error: authError } = await klien.auth.getUser(token);
   if (authError || !auth.user) {
     return res.status(401).json({ message: "Sesi tidak valid, silakan login ulang" });
   }
