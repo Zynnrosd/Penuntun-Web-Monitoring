@@ -1,28 +1,24 @@
+// frontend/src/components/ui/Logo.tsx
+
 import Image from "next/image";
-import { Montserrat } from "next/font/google";
 
-const display = Montserrat({ subsets: ["latin"], weight: ["700"] });
-
-type Props = {
-  variant?: "blue" | "white";
-  size?: number;
-};
-
-export function Logo({ variant = "blue", size = 40 }: Props) {
-  const src = variant === "white" ? "/logo-white.png" : "/logo-blue.png";
-  const textColor = variant === "white" ? "text-white" : "text-primary";
-  const nudge = variant === "white" ? "translate-y-[4px]" : "translate-y-[1px]";
+export function Logo({ variant = "blue", size = 40 }: { variant?: "blue" | "white"; size?: number }) {
+  const putih = variant === "white";
 
   return (
     <div className="flex items-center gap-2.5">
       <Image
-        src={src}
+        src={putih ? "/logo-white.png" : "/logo-blue.png"}
         alt="PENUNTUN"
         width={size}
         height={size}
-        className={`flex-shrink-0 ${nudge}`}
+        className="flex-shrink-0"
       />
-      <span className={`${display.className} text-xl font-bold italic ${textColor}`}>PENUNTUN</span>
+      <span
+        className={`text-xl font-extrabold tracking-[-0.03em] ${putih ? "text-white" : "text-secondary"}`}
+      >
+        PENUNTUN
+      </span>
     </div>
   );
 }

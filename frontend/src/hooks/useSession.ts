@@ -1,23 +1,57 @@
+// frontend/src/hooks/useSession.ts
+
 "use client";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { api } from "@/lib/api-client";
 
-export type SessionInfo = { nama_staf: string; role: "administrator" | "pengawas" } | null;
+export type Peran = "ADMINISTRATOR" | "PENGAWAS";
+export type StatusAkun = "MENUNGGU" | "AKTIF" | "DITOLAK" | "NONAKTIF";
+
+export type Sesi = {
+  id_admin: string;
+  role: Peran;
+  status: StatusAkun;
+  id_yayasan: string;
+  nama_staf: string | null;
+  email: string | null;
+  no_wa: string | null;
+  yayasan: { nama_yayasan: string; kota_yayasan: string } | null;
+};
 
 export function useSession() {
-  const [session, setSession] = useState<SessionInfo>(null);
+  const [sesi, setSesi] = useState<Sesi | null>(null);
+  const [memuat, setMemuat] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!data.session) return;
-      const { data: admin } = await supabase
-        .from("administrators")
-        .select("nama_staf, role")
-        .eq("id_admin", data.session.user.id)
-        .single();
-      if (admin) setSession({ nama_staf: admin.nama_staf ?? "Admin", role: admin.role });
-    });
+    let aktif = true;
+
+    api
+      .get<Sesi>("/auth/saya")
+      .then((data) => {
+        if (aktif) setSesi(data);
+      })
+      .catch(() => {
+        if (aktif) setSesi(null);
+      })
+      .finally(() => {
+        if (aktif) setMemuat(false);
+      });
+
+    return () => {
+      aktif = false;
+    };
   }, []);
 
-  return session;
+  return { sesi, memuat };
+}
+
+export function inisialNama(nama: string | null | undefined): string {
+  if (!nama?.trim()) return "?";
+  return nama
+    .trim()
+    .split(/\s+/)
+    .map((bagian) => bagian[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }

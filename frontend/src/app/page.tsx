@@ -1,21 +1,19 @@
+// frontend/src/app/page.tsx
+
 import Image from "next/image";
 import Link from "next/link";
-import { Montserrat } from "next/font/google";
 import { ArrowRight, Camera, Brain, Volume2, MapPin, Siren, Users, Radio, CircleDot } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-
-const display = Montserrat({ subsets: ["latin"], weight: ["600", "700"] });
 
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-background">
-      {/* NAVBAR */}
       <header className="sticky top-0 z-20 h-[76px] bg-background/75 backdrop-blur-md">
         <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-6">
           <Logo variant="blue" />
-            
+
           <nav className="hidden items-center gap-7 text-sm font-medium text-text-secondary md:flex">
             <a href="#home" className={`transition-colors hover:text-primary ${focusRing}`}>Home</a>
             <a href="#fitur" className={`transition-colors hover:text-primary ${focusRing}`}>Fitur</a>
@@ -32,11 +30,10 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* HERO — foto besar lagi, tepi atas memudar (gradasi) jadi tidak nabrak header */}
       <section id="home" className="relative flex min-h-[calc(100vh-76px)] items-center overflow-hidden">
         <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-10 px-6 py-8 lg:grid-cols-2">
           <div className="animate-fade-up">
-            <h1 className={`${display.className} text-4xl font-bold leading-[1.15] text-text-primary md:text-5xl`}>
+            <h1 className="text-4xl font-bold leading-[1.15] text-text-primary md:text-5xl">
               Tongkat pintar untuk langkah yang lebih aman
             </h1>
             <p className="mt-6 max-w-sm leading-relaxed text-text-secondary">
@@ -73,7 +70,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* DASHBOARD — foto melengkung dari tepi kiri + mockup panel, teks di kanan */}
       <section id="fitur" className="relative py-20 lg:py-24">
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 px-6 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="relative min-h-[420px]">
@@ -86,7 +82,6 @@ export default function LandingPage() {
               />
             </div>
 
-            {/* Mockup panel dashboard — ilustrasi, status selalu ikon + teks, merah hanya untuk SOS */}
             <figure aria-hidden="true" className="relative ml-auto mt-10 w-full max-w-sm -rotate-3 rounded-[28px] border border-border bg-white p-4 shadow-2xl shadow-text-primary/20">
               <figcaption className="flex items-center justify-between px-1 pb-3">
                 <span className="text-sm font-semibold text-text-primary">Pemantauan</span>
@@ -99,7 +94,7 @@ export default function LandingPage() {
                     <p className="text-sm font-medium text-text-primary">Pak Budi, PNT-01</p>
                     <p className="text-xs text-text-secondary">Jl. Pahlawan — Live</p>
                   </div>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success-text">
                     <Radio size={11} /> Online
                   </span>
                 </div>
@@ -128,7 +123,7 @@ export default function LandingPage() {
           </div>
 
           <div>
-            <h2 className={`${display.className} text-3xl font-bold leading-tight text-text-primary md:text-4xl`}>
+            <h2 className="text-3xl font-bold leading-tight text-text-primary md:text-4xl">
               Ingin tahu mereka baik-baik saja?
             </h2>
             <p className="mt-5 max-w-sm leading-relaxed text-text-secondary">
@@ -151,11 +146,10 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CARA KERJA — tiga ikon bulat */}
       <section id="cara-kerja" className="py-20 lg:py-24">
         <div className="mx-auto max-w-5xl px-6 text-center">
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">Cara Kerja</span>
-          <h2 className={`${display.className} mt-2 text-3xl font-bold text-text-primary`}>Bagaimana cara kerjanya?</h2>
+          <h2 className="mt-2 text-3xl font-bold text-text-primary">Bagaimana cara kerjanya?</h2>
 
           <div className="relative mt-16 grid grid-cols-1 gap-12 sm:grid-cols-3">
             <div className="absolute left-0 right-0 top-10 hidden h-px bg-border sm:block" />
@@ -168,7 +162,7 @@ export default function LandingPage() {
                 <span className="relative z-10 flex h-20 w-20 items-center justify-center rounded-full bg-primary text-white shadow-lg shadow-primary/30 ring-8 ring-background">
                   {s.icon}
                 </span>
-                <span className="mt-4 font-mono text-xs text-text-secondary">0{i + 1}</span>
+                <span className="data mt-4 text-xs text-text-secondary">0{i + 1}</span>
                 <h3 className="mt-1.5 font-semibold text-text-primary">{s.judul}</h3>
                 <p className="mt-2 max-w-[14rem] text-sm text-text-secondary">{s.teks}</p>
               </div>
@@ -177,12 +171,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FOOTER — navy dongker, 3 kolom */}
       <footer id="tentang" className="mt-10 bg-secondary">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-10 px-6 py-14 md:grid-cols-[1.4fr_1fr_1fr]">
           <div>
             <Logo variant="white" size={36} />
-          
+
             <p className="mt-3 max-w-[220px] text-sm leading-relaxed text-white/60">
               Navigasi berbasis AI dan pemantauan real-time untuk kemandirian penyandang tunanetra.
             </p>

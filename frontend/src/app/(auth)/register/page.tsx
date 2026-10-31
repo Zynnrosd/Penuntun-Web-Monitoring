@@ -1,180 +1,214 @@
+// frontend/src/app/(auth)/register/page.tsx
+
 "use client";
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
-import { Eye, EyeOff, Mail, Lock, User, Phone } from "lucide-react";
-import { api } from "@/lib/api-client";
-import { AuthVisualPanel } from "@/components/auth/AuthVisualPanel";
-import { YayasanCombobox } from "@/components/ui/YayasanCombobox";
-import { Logo } from "@/components/ui/Logo";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { AlertCircle, Info } from "lucide-react";
+import { api, ApiError } from "@/lib/api-client";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { Field, TombolTampilkan } from "@/components/ui/Field";
+import { YayasanPicker, Yayasan } from "@/components/ui/YayasanPicker";
+import { Button } from "@/components/ui/Button";
+
+type Alur = "yayasan" | "pengawas";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const awal = searchParams.get("tipe") === "perseorangan" ? "perseorangan" : "yayasan";
+  const [alur, setAlur] = useState<Alur>("yayasan");
 
-  const [tipeAkun, setTipeAkun] = useState<"yayasan" | "perseorangan">(awal);
-  const [form, setForm] = useState({ email: "", password: "", nama_staf: "", nama_yayasan: "", no_wa: "" });
-  const [idYayasanDipilih, setIdYayasanDipilih] = useState<string | null>(null);
-  const [lihatPassword, setLihatPassword] = useState(false);
-  const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [nama, setNama] = useState("");
+  const [email, setEmail] = useState("");
+  const [sandi, setSandi] = useState("");
+  const [lihatSandi, setLihatSandi] = useState(false);
+  const [namaYayasan, setNamaYayasan] = useState("");
+  const [kotaYayasan, setKotaYayasan] = useState("");
+  const [yayasanDipilih, setYayasanDipilih] = useState<Yayasan | null>(null);
 
-  function update(field: string, value: string) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const [galat, setGalat] = useState("");
+  const [yayasanSudahAda, setYayasanSudahAda] = useState(false);
+  const [sukses, setSukses] = useState("");
+  const [mengirim, setMengirim] = useState(false);
+
+  function gantiAlur(baru: Alur) {
+    setAlur(baru);
+    setGalat("");
+    setYayasanSudahAda(false);
   }
 
-  async function handleRegister(e: React.FormEvent) {
+  async function daftar(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    setLoading(true);
+    setGalat("");
+    setYayasanSudahAda(false);
+
+    if (alur === "pengawas" && !yayasanDipilih) {
+      setGalat("Pilih yayasan dari hasil pencarian terlebih dahulu.");
+      return;
+    }
+
+    setMengirim(true);
     try {
       const res = await api.post<{ message: string }>("/auth/register", {
-        ...form,
-        tipe_akun: tipeAkun,
-        id_yayasan: idYayasanDipilih,
+        alur,
+        nama,
+        email,
+        password: sandi,
+        ...(alur === "yayasan"
+          ? { nama_yayasan: namaYayasan, kota_yayasan: kotaYayasan }
+          : { id_yayasan: yayasanDipilih?.id_yayasan }),
       });
-      setInfo(res.message);
-      setTimeout(() => router.push("/login"), 1500);
+
+      setSukses(res.message);
+      setTimeout(() => router.replace("/login"), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registrasi gagal");
+      if (err instanceof ApiError && err.code === "YAYASAN_SUDAH_ADA") {
+        setYayasanSudahAda(true);
+      } else {
+        setGalat(err instanceof Error ? err.message : "Pendaftaran gagal.");
+      }
     } finally {
-      setLoading(false);
+      setMengirim(false);
     }
   }
 
+  if (sukses) {
+    return (
+      <AuthShell headline="Pantau semua pengguna dari satu dashboard." photoSrc="/auth-register.png">
+        <div className="flex flex-col gap-5">
+          <h1 className="text-[32px] font-extrabold leading-[38px] tracking-[-0.04em]">Berhasil</h1>
+          <p className="text-[15px] leading-6 text-text-secondary">{sukses}</p>
+          <p className="text-sm text-text-secondary">Mengalihkan ke halaman Masuk…</p>
+        </div>
+      </AuthShell>
+    );
+  }
+
   return (
-    <div className="grid h-screen grid-cols-1 gap-6 overflow-hidden bg-background p-4 md:grid-cols-2 md:p-6">
-      <div className="flex min-h-0 items-center justify-center overflow-y-auto">
-        <div className="w-full max-w-sm py-4">
-          <div className="mb-5">
-            <Logo variant="blue" />
-          </div>
-
-          <h1 className="text-xl font-bold text-text-primary">Buat Akun</h1>
-          <p className="mb-4 text-sm text-text-secondary">Pilih jenis akun Anda</p>
-
-          <div className="mb-4 grid grid-cols-2 gap-2">
+    <AuthShell headline="Pantau semua pengguna dari satu dashboard." photoSrc="/auth-register.png">
+      <form onSubmit={daftar} className="flex flex-col gap-2.5" aria-label={`Daftar sebagai ${alur}`}>
+        <div className="flex gap-1 rounded-pill bg-field p-1" role="tablist" aria-label="Daftar sebagai">
+          {(["yayasan", "pengawas"] as const).map((a) => (
             <button
+              key={a}
               type="button"
-              onClick={() => setTipeAkun("yayasan")}
-              className={`rounded-input border px-3 py-2 text-sm font-medium transition-colors ${
-                tipeAkun === "yayasan" ? "border-primary bg-primary-soft text-primary" : "border-border text-text-secondary"
+              role="tab"
+              aria-selected={alur === a}
+              onClick={() => gantiAlur(a)}
+              className={`h-[42px] flex-1 rounded-pill text-[15px] font-bold transition-colors ${
+                alur === a ? "bg-secondary text-white" : "text-text-secondary"
               }`}
             >
-              Yayasan
+              {a === "yayasan" ? "Administrator" : "Pengawas"}
             </button>
-            <button
-              type="button"
-              onClick={() => setTipeAkun("perseorangan")}
-              className={`rounded-input border px-3 py-2 text-sm font-medium transition-colors ${
-                tipeAkun === "perseorangan" ? "border-primary bg-primary-soft text-primary" : "border-border text-text-secondary"
-              }`}
-            >
-              Perseorangan
-            </button>
-          </div>
+          ))}
+        </div>
 
-          {error && <div className="mb-3 rounded-input bg-danger-soft px-3 py-2 text-sm text-danger">{error}</div>}
-          {info && <div className="mb-3 rounded-input bg-success-soft px-3 py-2 text-sm text-success">{info}</div>}
-
-          <form onSubmit={handleRegister}>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Nama Lengkap</label>
-            <div className="relative mb-2.5">
-              <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-              <input
-                required
-                value={form.nama_staf}
-                onChange={(e) => update("nama_staf", e.target.value)}
-                placeholder="Masukkan nama anda"
-                className="w-full rounded-input border border-border py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
-              />
-            </div>
-
-            {tipeAkun === "yayasan" && (
-              <div className="mb-2.5">
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Nama Yayasan</label>
-                <YayasanCombobox
-                  value={form.nama_yayasan}
-                  onSelectExisting={(id, nama) => {
-                    setIdYayasanDipilih(id);
-                    update("nama_yayasan", nama);
-                  }}
-                  onSelectNew={(nama) => {
-                    setIdYayasanDipilih(null);
-                    update("nama_yayasan", nama);
-                  }}
-                />
-              </div>
-            )}
-
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Email</label>
-            <div className="relative mb-2.5">
-              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-              <input
-                type="email"
-                required
-                value={form.email}
-                onChange={(e) => update("email", e.target.value)}
-                placeholder="nama@gmail.com"
-                className="w-full rounded-input border border-border py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
-              />
-            </div>
-
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Kata Sandi</label>
-            <div className="relative mb-2.5">
-              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-              <input
-                type={lihatPassword ? "text" : "password"}
-                required
-                minLength={6}
-                value={form.password}
-                onChange={(e) => update("password", e.target.value)}
-                placeholder="Minimal 6 karakter"
-                className="w-full rounded-input border border-border py-2 pl-9 pr-10 text-sm outline-none focus:border-primary"
-              />
-              <button type="button" onClick={() => setLihatPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary">
-                {lihatPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Nomor WhatsApp</label>
-            <div className="relative mb-4">
-              <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-              <input
-                value={form.no_wa}
-                onChange={(e) => update("no_wa", e.target.value)}
-                placeholder="+6281234567890"
-                className="w-full rounded-input border border-border py-2 pl-9 pr-3 text-sm outline-none focus:border-primary"
-              />
-            </div>
-
-                        <button
-              type="submit"
-              disabled={loading}
-              suppressHydrationWarning
-              className="w-full rounded-input bg-primary py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-50"
-            >
-              {loading ? "Mendaftarkan..." : "Buat Akun"}
-            </button>
-          </form>
-
-          <p className="mt-4 text-center text-sm text-text-secondary">
-            Sudah punya akun?{" "}
-            <a href="/login" className="font-medium text-primary hover:underline">Masuk</a>
+        <div className="mt-2">
+          <h1 className="text-[32px] font-extrabold leading-[38px] tracking-[-0.04em]">Buat akun</h1>
+          <p className="mt-1 text-[15px] text-text-secondary">
+            {alur === "yayasan" ? "Isi data yayasan Anda untuk mulai." : "Isi data Anda dan pilih yayasan."}
           </p>
         </div>
-      </div>
-        <AuthVisualPanel
-          photoSrc="/auth-register.png"
-          photoPosition="center 15%"
-          eyebrow="Bergabung Sekarang"
-          headline="Satu akun, lebih aman."
-          subheadline="Baik untuk yayasan maupun keluarga, data Anda terisolasi penuh dan terenkripsi."
-          ctaHref="/login"
-          ctaLabel="Masuk"
+
+        {galat && (
+          <div
+            role="alert"
+            className="flex gap-3 rounded-inner bg-danger-soft px-[18px] py-3.5 text-[15px] leading-[22px] text-danger-text"
+          >
+            <AlertCircle size={20} className="flex-none" />
+            {galat}
+          </div>
+        )}
+
+        {yayasanSudahAda && (
+          <div
+            role="alert"
+            className="flex flex-col gap-3 rounded-inner bg-warning-soft px-[18px] py-3.5 text-[15px] leading-[22px] text-warning-text"
+          >
+            <div className="flex gap-3">
+              <Info size={20} className="flex-none" />
+              <span>
+                <b>{namaYayasan}</b> di {kotaYayasan} sudah terdaftar. Yang pertama mendaftar menjadi Administrator
+                yayasan. Daftar sebagai Pengawas, lalu minta persetujuannya.
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-11 self-start"
+              onClick={() => {
+                setYayasanSudahAda(false);
+                setAlur("pengawas");
+              }}
+            >
+              Daftar sebagai Pengawas
+            </Button>
+          </div>
+        )}
+
+        {alur === "yayasan" && (
+          <div className="grid grid-cols-[2fr_1fr] gap-3">
+            <Field
+              label="Nama yayasan"
+              required
+              value={namaYayasan}
+              onChange={(e) => setNamaYayasan(e.target.value)}
+              placeholder="Yayasan Komunitas Sahabat Mata"
+            />
+            <Field
+              label="Kota"
+              required
+              value={kotaYayasan}
+              onChange={(e) => setKotaYayasan(e.target.value)}
+              placeholder="Semarang"
+            />
+          </div>
+        )}
+
+        <Field
+          label="Nama lengkap"
+          required
+          autoComplete="name"
+          value={nama}
+          onChange={(e) => setNama(e.target.value)}
         />
-     </div>
+
+        <Field
+          label="Email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+
+        <Field
+          label="Kata sandi"
+          type={lihatSandi ? "text" : "password"}
+          required
+          minLength={6}
+          autoComplete="new-password"
+          value={sandi}
+          onChange={(e) => setSandi(e.target.value)}
+          hint="Minimal 6 karakter."
+          trailing={<TombolTampilkan aktif={lihatSandi} onToggle={() => setLihatSandi((v) => !v)} />}
+        />
+
+        {alur === "pengawas" && (
+          <YayasanPicker dipilih={yayasanDipilih} onPilih={setYayasanDipilih} />
+        )}
+
+        <Button type="submit" disabled={mengirim} className="mt-2 h-[52px] w-full">
+          {mengirim ? "Memproses…" : alur === "yayasan" ? "Buat akun" : "Kirim permintaan"}
+        </Button>
+
+        <p className="text-center text-sm text-text-secondary">
+          Sudah punya akun?{" "}
+          <Link href="/login" className="font-bold text-secondary">
+            Masuk
+          </Link>
+        </p>
+      </form>
+    </AuthShell>
   );
 }
