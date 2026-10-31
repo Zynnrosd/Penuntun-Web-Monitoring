@@ -1,9 +1,11 @@
+// backend/src/routes/geofence.routes.ts
+
 import { Router } from "express";
 import { supabase } from "../lib/supabase";
-import { requireAuth, requireRole, getSession } from "../lib/auth";
+import { requireAuth, requireRole, getSession, requireAktif } from "../lib/auth";
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth, requireAktif);
 
 router.get("/", async (req, res) => {
   const { id_yayasan } = getSession(req);
@@ -37,7 +39,7 @@ router.get("/:id_perangkat", async (req, res) => {
   res.json(data);
 });
 
-router.put("/:id_perangkat", requireRole("administrator"), async (req, res) => {
+router.put("/:id_perangkat", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { id_yayasan } = getSession(req);
   const { nama_area, center_lat, center_long, radius_meter } = req.body;
 
@@ -84,7 +86,7 @@ router.put("/:id_perangkat", requireRole("administrator"), async (req, res) => {
   res.status(201).json(data);
 });
 
-router.delete("/:id_perangkat", requireRole("administrator"), async (req, res) => {
+router.delete("/:id_perangkat", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { id_yayasan } = getSession(req);
 
   const { data: perangkat } = await supabase

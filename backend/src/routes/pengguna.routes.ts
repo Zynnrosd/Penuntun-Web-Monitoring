@@ -1,9 +1,11 @@
+// backend/src/routes/pengguna.routes.ts
+
 import { Router } from "express";
 import { supabase } from "../lib/supabase";
-import { requireAuth, requireRole, getSession } from "../lib/auth";
+import { requireAuth, requireRole, getSession, requireAktif } from "../lib/auth";
 
 const router = Router();
-router.use(requireAuth, requireRole("administrator"));
+router.use(requireAuth, requireAktif, requireRole("ADMINISTRATOR"));
 
 router.get("/", async (req, res) => {
   const { id_yayasan } = getSession(req);

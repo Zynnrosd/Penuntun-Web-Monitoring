@@ -1,9 +1,11 @@
+// backend/src/routes/perangkat.routes.ts
+
 import { Router } from "express";
 import { supabase } from "../lib/supabase";
-import { requireAuth, requireRole, getSession } from "../lib/auth";
+import { requireAuth, requireRole, getSession, requireAktif } from "../lib/auth";
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth, requireAktif);
 
 router.get("/", async (req, res) => {
   const { id_yayasan } = getSession(req);
@@ -34,7 +36,7 @@ router.get("/:id/riwayat", async (req, res) => {
   res.json(data);
 });
 
-router.post("/", requireRole("administrator"), async (req, res) => {
+router.post("/", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { id_yayasan } = getSession(req);
   const { id_perangkat } = req.body;
   if (!id_perangkat?.trim()) return res.status(400).json({ message: "ID Perangkat wajib diisi" });
@@ -47,7 +49,7 @@ router.post("/", requireRole("administrator"), async (req, res) => {
   res.status(201).json(data);
 });
 
-router.patch("/:id/pairing", requireRole("administrator"), async (req, res) => {
+router.patch("/:id/pairing", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { id_yayasan } = getSession(req);
   const { dipakai_oleh } = req.body;
 
@@ -84,7 +86,7 @@ router.patch("/:id/pairing", requireRole("administrator"), async (req, res) => {
   res.json(data);
 });
 
-router.delete("/:id", requireRole("administrator"), async (req, res) => {
+router.delete("/:id", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { id_yayasan } = getSession(req);
   const { error, count } = await supabase
     .from("perangkat")

@@ -1,107 +1,151 @@
+// backend/src/routes/auth.routes.ts
+
 import { Router } from "express";
-import { supabase } from "../lib/supabase";
+import { supabase, supabaseAnon } from "../lib/supabase";
+import { requireAuth, getSession, db } from "../lib/auth";
 
 const router = Router();
 
-router.get("/yayasan", async (req, res) => {
-  const q = (req.query.q as string | undefined)?.trim() ?? "";
-  if (q.length < 2) return res.json([]);
+const BATAS_PENDAFTARAN = 5;
+const JENDELA_MS = 15 * 60 * 1000;
+const percobaanDaftar = new Map<string, { jumlah: number; mulai: number }>();
 
-  const aman = q.replace(/[%_]/g, (c) => `\\${c}`);
+function melebihiBatas(ip: string): boolean {
+  const sekarang = Date.now();
+  const catatan = percobaanDaftar.get(ip);
 
-  const { data, error } = await supabase
-    .from("yayasan")
-    .select("id_yayasan, nama_yayasan")
-    .ilike("nama_yayasan", `%${aman}%`)
-    .limit(8);
+  if (!catatan || sekarang - catatan.mulai > JENDELA_MS) {
+    percobaanDaftar.set(ip, { jumlah: 1, mulai: sekarang });
+    return false;
+  }
 
-  if (error) return res.status(500).json({ message: error.message });
-  res.json(data);
-});
+  catatan.jumlah += 1;
+  return catatan.jumlah > BATAS_PENDAFTARAN;
+}
 
 router.post("/register", async (req, res) => {
-  const { email, password, nama_staf, nama_yayasan, id_yayasan: idYayasanDipilih, no_wa, tipe_akun } = req.body;
-
-  const isPerseorangan = tipe_akun === "perseorangan";
-
-  if (!isPerseorangan && !nama_yayasan?.trim() && !idYayasanDipilih) {
-    return res.status(400).json({ message: "Pilih atau isi nama yayasan" });
-  }
-  if (!nama_staf?.trim()) {
-    return res.status(400).json({ message: "Nama lengkap wajib diisi" });
+  if (melebihiBatas(req.ip ?? "tidak diketahui")) {
+    return res.status(429).json({
+      message: "Terlalu banyak percobaan pendaftaran. Coba lagi dalam 15 menit.",
+    });
   }
 
-  const noWaBersih: string | null = no_wa?.trim() || null;
-  if (noWaBersih && !/^\+62[0-9]{9,13}$/.test(noWaBersih)) {
-    return res.status(400).json({ message: "Format nomor WhatsApp tidak valid. Gunakan format +62xxxxxxxxx" });
+  const { alur, nama, email, password, nama_yayasan, kota_yayasan, id_yayasan } = req.body;
+
+  if (alur !== "yayasan" && alur !== "pengawas") {
+    return res.status(400).json({ message: "Alur pendaftaran tidak valid" });
+  }
+  if (!nama?.trim()) return res.status(400).json({ message: "Nama lengkap wajib diisi" });
+  if (!email?.trim()) return res.status(400).json({ message: "Email wajib diisi" });
+  if (typeof password !== "string" || password.length < 6) {
+    return res.status(400).json({ message: "Kata sandi minimal 6 karakter" });
   }
 
-  let idYayasan: string;
-  let jadiAdministrator: boolean;
+  const metadata: Record<string, string> = { alur, nama: nama.trim() };
 
-  if (isPerseorangan) {
-    const { data: newYayasan, error: yayasanError } = await supabase
-      .from("yayasan")
-      .insert({ nama_yayasan: `${nama_staf.trim()} (Perseorangan)` })
-      .select()
-      .single();
-    if (yayasanError || !newYayasan) {
-      return res.status(400).json({ message: yayasanError?.message ?? "Gagal membuat akun perseorangan" });
-    }
-    idYayasan = newYayasan.id_yayasan;
-    jadiAdministrator = true;
-  } else if (idYayasanDipilih) {
-    const { data: yayasanAda } = await supabase
-      .from("yayasan")
-      .select("id_yayasan")
-      .eq("id_yayasan", idYayasanDipilih)
-      .single();
-    if (!yayasanAda) return res.status(400).json({ message: "Yayasan tidak ditemukan" });
-    idYayasan = yayasanAda.id_yayasan;
-    jadiAdministrator = false;
+  if (alur === "yayasan") {
+    if (!nama_yayasan?.trim()) return res.status(400).json({ message: "Nama yayasan wajib diisi" });
+    if (!kota_yayasan?.trim()) return res.status(400).json({ message: "Kota yayasan wajib diisi" });
+    metadata.nama_yayasan = nama_yayasan.trim();
+    metadata.kota_yayasan = kota_yayasan.trim();
   } else {
-    const { data: newYayasan, error: yayasanError } = await supabase
-      .from("yayasan")
-      .insert({ nama_yayasan: nama_yayasan.trim() })
-      .select()
-      .single();
-    if (yayasanError || !newYayasan) {
-      return res.status(400).json({ message: yayasanError?.message ?? "Gagal membuat yayasan" });
+    if (typeof id_yayasan !== "string" || !id_yayasan) {
+      return res.status(400).json({ message: "Yayasan belum dipilih" });
     }
-    idYayasan = newYayasan.id_yayasan;
-    jadiAdministrator = true;
+    metadata.id_yayasan = id_yayasan;
   }
 
-  const { data: created, error: createError } = await supabase.auth.admin.createUser({
-    email, password, email_confirm: true,
+  const { data: dibuat, error } = await supabase.auth.admin.createUser({
+    email: email.trim(),
+    password,
+    email_confirm: true,
+    user_metadata: metadata,
   });
-  if (createError || !created.user) {
-    return res.status(400).json({ message: createError?.message ?? "Registrasi gagal" });
-  }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("administrators")
-    .insert({
-      id_admin: created.user.id, email, nama_staf, id_yayasan: idYayasan, no_wa: noWaBersih,
-      role: jadiAdministrator ? "administrator" : "pengawas",
-    })
-    .select()
-    .single();
+  if (error || !dibuat.user) {
+    const pesan = error?.message ?? "";
 
-  if (profileError) {
-    await supabase.auth.admin.deleteUser(created.user.id);
-    return res.status(400).json({ message: profileError.message });
+    if (pesan.includes("sudah terdaftar")) {
+      return res.status(409).json({
+        code: "YAYASAN_SUDAH_ADA",
+        message: "Yayasan ini sudah terdaftar. Daftar sebagai Pengawas?",
+      });
+    }
+    if (/already|registered|exists/i.test(pesan)) {
+      return res.status(409).json({ message: "Email sudah terdaftar" });
+    }
+    if (pesan.includes("Yayasan tidak ditemukan")) {
+      return res.status(400).json({ message: "Yayasan tidak ditemukan" });
+    }
+
+    console.error("[AUTH] Registrasi gagal:", error);
+    return res.status(400).json({ message: "Registrasi gagal. Periksa kembali isian Anda." });
   }
 
   res.status(201).json({
-    message: isPerseorangan
-      ? "Akun perseorangan berhasil dibuat"
-      : jadiAdministrator
-      ? "Akun berhasil dibuat sebagai Administrator yayasan baru"
-      : "Akun berhasil dibuat sebagai Pengawas",
-    id_admin: profile.id_admin,
-    role: profile.role,
+    alur,
+    message:
+      alur === "yayasan"
+        ? "Yayasan dan akun Administrator berhasil dibuat"
+        : "Permintaan terkirim. Menunggu persetujuan Administrator yayasan.",
   });
+});
+
+router.get("/yayasan", async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q : "";
+  if (q.trim().length < 3) return res.json([]);
+
+  const { data, error } = await supabaseAnon.rpc("cari_yayasan", { q });
+
+  if (error) {
+    console.error("[AUTH] Pencarian yayasan gagal:", error);
+    return res.status(500).json({ message: "Gagal mencari yayasan" });
+  }
+
+  res.json(data ?? []);
+});
+
+router.get("/saya", requireAuth, async (req, res) => {
+  const { id, role, status, id_yayasan } = getSession(req);
+
+  const { data: akun } = await db(req)
+    .from("administrators")
+    .select("nama_staf, email, no_wa, yayasan:id_yayasan(nama_yayasan, kota_yayasan)")
+    .eq("id_admin", id)
+    .maybeSingle();
+
+  res.json({
+    id_admin: id,
+    role,
+    status,
+    id_yayasan,
+    nama_staf: akun?.nama_staf ?? null,
+    email: akun?.email ?? null,
+    no_wa: akun?.no_wa ?? null,
+    yayasan: akun?.yayasan ?? null,
+  });
+});
+
+router.post("/ajukan-yayasan-lain", requireAuth, async (req, res) => {
+  const { id_yayasan } = req.body;
+  if (typeof id_yayasan !== "string" || !id_yayasan) {
+    return res.status(400).json({ message: "Yayasan belum dipilih" });
+  }
+
+  const { error } = await db(req).rpc("ajukan_ke_yayasan_lain", { p_id_yayasan: id_yayasan });
+
+  if (error) {
+    if (error.code === "P0002") return res.status(404).json({ message: "Yayasan tidak ditemukan" });
+    if (error.code === "42501") {
+      return res.status(403).json({
+        message: "Hanya akun Pengawas berstatus Ditolak yang dapat mengajukan ulang",
+      });
+    }
+    console.error("[AUTH] Pengajuan ke yayasan lain gagal:", error);
+    return res.status(400).json({ message: "Gagal mengajukan ke yayasan lain" });
+  }
+
+  res.json({ message: "Permintaan terkirim. Menunggu persetujuan Administrator yayasan." });
 });
 
 export default router;

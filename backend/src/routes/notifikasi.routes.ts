@@ -1,10 +1,12 @@
+// backend/src/routes/notifikasi.routes.ts
+
 import { Router } from "express";
 import { supabase } from "../lib/supabase";
-import { requireAuth, getSession } from "../lib/auth";
+import { requireAuth, getSession, requireAktif } from "../lib/auth";
 import { buatNotifikasiDarurat } from "../services/notifikasi.service";
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth, requireAktif);
 
 router.get("/", async (req, res) => {
   const { id_yayasan } = getSession(req);

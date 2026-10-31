@@ -17,7 +17,6 @@ const MENU_UMUM = [
 const MENU_MANAJEMEN = [
   { href: "/perangkat", label: "Kelola Data Perangkat" },
   { href: "/pengguna", label: "Kelola Data Pengguna" },
-  { href: "/pengaturan/whatsapp", label: "Konfigurasi Notifikasi" },
 ];
 
 export function Sidebar({ isAdmin, onNavigate }: { isAdmin: boolean; onNavigate?: () => void }) {
