@@ -1,6 +1,7 @@
 // frontend/src/components/auth/AuthShell.tsx
 
 import Link from "next/link";
+import { Logo } from "@/components/ui/Logo";
 
 export function AuthShell({
   headline,
@@ -12,27 +13,20 @@ export function AuthShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen gap-3.5 bg-[#E9EFF8] p-3.5">
-      <div className="flex flex-1 items-center justify-center rounded-[36px] bg-surface p-6 shadow-[0_20px_40px_-28px_rgba(29,58,104,0.4)]">
-        <div className="w-full max-w-[440px] animate-fade-up">
-          <Link
-            href="/"
-            className="mb-4 flex items-center gap-3 text-xl font-bold text-secondary"
-            aria-label="Penuntun, kembali ke beranda"
-          >
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <circle cx="16" cy="16" r="14" stroke="#1D3A68" strokeOpacity=".35" strokeWidth="1.5" />
-              <circle cx="16" cy="16" r="8.5" stroke="#1D3A68" strokeOpacity=".6" strokeWidth="1.5" />
-              <circle cx="16" cy="16" r="3" fill="#008290" />
-            </svg>
-            Penuntun
-          </Link>
-          {children}
+    <div className="flex h-screen gap-3.5 bg-[#E9EFF8] p-3.5">
+      <div className="flex-1 overflow-y-auto rounded-[28px] bg-surface shadow-[0_20px_40px_-28px_rgba(29,58,104,0.4)]">
+        <div className="flex min-h-full items-center justify-center p-5">
+          <div className="w-full max-w-[400px] animate-fade-up">
+            <Link href="/" className="mb-4 inline-flex" aria-label="Penuntun, kembali ke beranda">
+              <Logo variant="biru" tinggi={32} />
+            </Link>
+            {children}
+          </div>
         </div>
       </div>
 
       <aside
-        className="relative hidden w-[520px] flex-none flex-col justify-end overflow-hidden rounded-[36px] bg-secondary p-11 text-on-dark md:flex"
+        className="relative hidden w-[36%] min-w-[420px] flex-none flex-col justify-end overflow-hidden rounded-[28px] bg-secondary p-9 text-on-dark md:flex"
         aria-label="Tentang Penuntun"
       >
         <div
@@ -65,7 +59,7 @@ export function AuthShell({
           ))}
         </svg>
 
-        <h2 className="relative max-w-[340px] text-[28px] font-extrabold leading-9 tracking-[-0.03em] text-white">
+        <h2 className="relative max-w-[340px] text-[25px] font-extrabold leading-8 tracking-[-0.03em] text-white">
           {headline}
         </h2>
       </aside>

@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Home, MapPin, BatteryMedium, Siren, Smartphone, Users, ShieldCheck, LogOut } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/cn";
 
@@ -40,7 +41,7 @@ export function Sidebar({
   function kelas(href: string) {
     const aktif = pathname === href || pathname.startsWith(`${href}/`);
     return cn(
-      "flex h-11 items-center gap-3 rounded-nav px-3 text-sm font-semibold transition-colors",
+      "flex h-10 items-center gap-3 rounded-nav px-3 text-sm font-semibold transition-colors",
       aktif ? "bg-white text-primary font-bold" : "text-nav hover:bg-white/10"
     );
   }
@@ -50,20 +51,15 @@ export function Sidebar({
       <Link
         href="/home"
         onClick={onNavigate}
-        className="-mx-4 mb-4 flex h-[88px] flex-none items-center gap-3 border-b border-white/[0.18] px-7 text-[22px] font-extrabold tracking-[-0.03em] text-white"
+        className="-mx-4 mb-4 flex h-[72px] flex-none items-center border-b border-white/[0.18] px-6"
       >
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="flex-none">
-          <circle cx="16" cy="16" r="14" stroke="#F5F7FA" strokeOpacity=".35" strokeWidth="1.5" />
-          <circle cx="16" cy="16" r="8.5" stroke="#F5F7FA" strokeOpacity=".6" strokeWidth="1.5" />
-          <circle cx="16" cy="16" r="3" fill="#5FD0D9" />
-        </svg>
-        Penuntun
+        <Logo variant="putih" tinggi={30} />
       </Link>
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Navigasi utama">
         {MENU_UMUM.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} onClick={onNavigate} className={kelas(href)}>
-            <Icon size={20} strokeWidth={2} />
+            <Icon size={18} strokeWidth={2} />
             {label}
           </Link>
         ))}
@@ -75,7 +71,7 @@ export function Sidebar({
             </div>
             {MENU_MANAJEMEN.map(({ href, label, icon: Icon }) => (
               <Link key={href} href={href} onClick={onNavigate} className={kelas(href)}>
-                <Icon size={20} strokeWidth={2} />
+                <Icon size={18} strokeWidth={2} />
                 {label}
                 {href === "/pengawas" && jumlahMenunggu > 0 && (
                   <span className="ml-auto flex h-[22px] min-w-[22px] items-center justify-center rounded-pill bg-danger px-1.5 text-[13px] font-semibold text-white">
@@ -91,9 +87,9 @@ export function Sidebar({
       <div className="mt-auto border-t border-white/[0.18] pt-3">
         <button
           onClick={keluar}
-          className="flex h-11 w-full items-center gap-3 rounded-nav px-3 text-left text-sm font-semibold text-nav transition-colors hover:bg-white/10"
+          className="flex h-10 w-full items-center gap-3 rounded-nav px-3 text-left text-sm font-semibold text-nav transition-colors hover:bg-white/10"
         >
-          <LogOut size={20} strokeWidth={2} />
+          <LogOut size={18} strokeWidth={2} />
           Keluar
         </button>
       </div>

@@ -19,21 +19,21 @@ export function Field({
 
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 block text-[15px] font-bold">
+      <label htmlFor={id} className="mb-1.5 block text-sm font-bold">
         {label}
       </label>
       <div className="relative">
         <input
           id={id}
           className={cn(
-            "h-[50px] w-full rounded-field bg-field px-[18px] text-[15px] outline-none",
+            "h-[46px] w-full rounded-field bg-field px-4 text-[15px] outline-none",
             "focus:bg-surface focus:shadow-[inset_0_0_0_2px_var(--color-ring)]",
             trailing && "pr-28",
             className
           )}
           {...props}
         />
-        {trailing && <div className="absolute right-[18px] top-1/2 -translate-y-1/2">{trailing}</div>}
+        {trailing && <div className="absolute right-4 top-1/2 -translate-y-1/2">{trailing}</div>}
       </div>
       {hint && <p className="mt-1.5 text-sm text-text-secondary">{hint}</p>}
     </div>

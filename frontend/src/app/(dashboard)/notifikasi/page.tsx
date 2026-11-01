@@ -144,7 +144,7 @@ export default function NotifikasiPage() {
               <MapView
                 markers={[
                   {
-                    id_perangkat: pilih.id_perangkat,
+                    id_perangkat: pilih.id_perangkat ?? "—",
                     nama: pilih.nama_snapshot ?? "Pengguna",
                     lat: pilih.latitude_sos,
                     lng: pilih.longitude_sos,

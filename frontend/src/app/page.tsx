@@ -12,7 +12,7 @@ export default function LandingPage() {
     <div className="min-h-screen overflow-x-hidden bg-background">
       <header className="sticky top-0 z-20 h-[76px] bg-background/75 backdrop-blur-md">
         <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-6">
-          <Logo variant="blue" />
+          <Logo variant="biru" tinggi={30} />
 
           <nav className="hidden items-center gap-7 text-sm font-medium text-text-secondary md:flex">
             <a href="#home" className={`transition-colors hover:text-primary ${focusRing}`}>Home</a>
@@ -64,7 +64,14 @@ export default function LandingPage() {
                 maskImage: "radial-gradient(ellipse 100% 100% at 50% 50%, black 90%, transparent 100%)",
               }}
             >
-              <Image src="/auth-login.png" alt="Pengguna PENUNTUN berjalan di trotoar" fill className="object-cover" priority />
+              <Image
+                src="/auth-login.png"
+                alt="Pengguna PENUNTUN berjalan di trotoar"
+                fill
+                sizes="(max-width: 1024px) 100vw, 512px"
+                className="object-cover"
+                priority
+              />
             </div>
           </div>
         </div>
@@ -78,6 +85,7 @@ export default function LandingPage() {
                 src="/auth-register.png"
                 alt="Pengguna PENUNTUN berjalan di area perkotaan"
                 fill
+                sizes="(max-width: 1024px) 100vw, 700px"
                 className="object-cover object-[center_15%]"
               />
             </div>
@@ -174,7 +182,7 @@ export default function LandingPage() {
       <footer id="tentang" className="mt-10 bg-secondary">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-10 px-6 py-14 md:grid-cols-[1.4fr_1fr_1fr]">
           <div>
-            <Logo variant="white" size={36} />
+            <Logo variant="putih" tinggi={34} />
 
             <p className="mt-3 max-w-[220px] text-sm leading-relaxed text-white/60">
               Navigasi berbasis AI dan pemantauan real-time untuk kemandirian penyandang tunanetra.
