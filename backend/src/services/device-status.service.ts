@@ -15,7 +15,7 @@ const OFFLINE_TIMEOUT_MS =
 
 // Backend mengecek setiap 1 detik.
 const CHECK_INTERVAL_MS =
-  1_000;
+  10_000;
 
 
 let interval:

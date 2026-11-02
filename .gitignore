@@ -21,6 +21,8 @@ backend/src/test-auth.ts
 # =========================
 **/.env
 **/.env.*
+# Template variabel lingkungan tetap ikut (tanpa nilai rahasia)
+!**/.env.example
 
 # =========================
 # Logs

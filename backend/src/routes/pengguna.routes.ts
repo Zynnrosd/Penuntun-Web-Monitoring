@@ -1,77 +1,68 @@
+// backend/src/routes/pengguna.routes.ts
+
 import { Router } from "express";
-import { supabase } from "../lib/supabase";
-import { requireAuth, requireRole, getSession } from "../lib/auth";
+import { requireAuth, requireAktif, requireRole, getSession, db } from "../lib/auth";
+import { balasGalat } from "../lib/galat";
 
 const router = Router();
-router.use(requireAuth, requireRole("administrator"));
+router.use(requireAuth, requireAktif);
+
+const KOLOM = "id_tunanetra, id_yayasan, nama_tunanetra, alamat";
 
 router.get("/", async (req, res) => {
-  const { id_yayasan } = getSession(req);
-  const { data, error } = await supabase.from("pengguna_tunanetra").select("*").eq("id_yayasan", id_yayasan);
-  if (error) return res.status(500).json({ message: error.message });
+  const { data, error } = await db(req).from("pengguna_tunanetra").select(KOLOM).order("nama_tunanetra");
+  if (error) return balasGalat(res, "PENGGUNA daftar", error);
   res.json(data);
 });
 
-router.post("/", async (req, res) => {
-  const { id_yayasan } = getSession(req);
+router.post("/", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { nama_tunanetra, alamat } = req.body;
-  if (!nama_tunanetra?.trim()) return res.status(400).json({ message: "Nama wajib diisi" });
+  if (typeof nama_tunanetra !== "string" || !nama_tunanetra.trim()) {
+    return res.status(400).json({ message: "Nama pengguna wajib diisi" });
+  }
 
-  const { data, error } = await supabase
+  const { id_yayasan } = getSession(req);
+  const { data, error } = await db(req)
     .from("pengguna_tunanetra")
-    .insert({ nama_tunanetra: nama_tunanetra.trim(), alamat, id_yayasan })
-    .select()
+    .insert({ nama_tunanetra: nama_tunanetra.trim(), alamat: alamat ?? null, id_yayasan })
+    .select(KOLOM)
     .single();
-  if (error) return res.status(400).json({ message: error.message });
+
+  if (error) return balasGalat(res, "PENGGUNA tambah", error);
   res.status(201).json(data);
 });
 
-router.patch("/:id", async (req, res) => {
-  const { id_yayasan } = getSession(req);
+router.patch("/:id", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { nama_tunanetra, alamat } = req.body;
-  if (!nama_tunanetra?.trim()) return res.status(400).json({ message: "Nama wajib diisi" });
+  if (typeof nama_tunanetra !== "string" || !nama_tunanetra.trim()) {
+    return res.status(400).json({ message: "Nama pengguna wajib diisi" });
+  }
 
-  const { data, error } = await supabase
+  const { data, error } = await db(req)
     .from("pengguna_tunanetra")
-    .update({ nama_tunanetra: nama_tunanetra.trim(), alamat })
+    .update({ nama_tunanetra: nama_tunanetra.trim(), alamat: alamat ?? null })
     .eq("id_tunanetra", req.params.id)
-    .eq("id_yayasan", id_yayasan)
-    .select()
-    .single();
+    .select(KOLOM)
+    .maybeSingle();
 
-  if (error) return res.status(400).json({ message: error.message });
+  if (error) return balasGalat(res, "PENGGUNA ubah", error);
   if (!data) return res.status(404).json({ message: "Pengguna tidak ditemukan" });
   res.json(data);
 });
 
-router.delete("/:id", async (req, res) => {
-  const { id_yayasan } = getSession(req);
-
-  const { data: target } = await supabase
+router.delete("/:id", requireRole("ADMINISTRATOR"), async (req, res) => {
+  const { error, count } = await db(req)
     .from("pengguna_tunanetra")
-    .select("id_tunanetra")
-    .eq("id_tunanetra", req.params.id)
-    .eq("id_yayasan", id_yayasan)
-    .single();
-  if (!target) return res.status(404).json({ message: "Pengguna tidak ditemukan" });
+    .delete({ count: "exact" })
+    .eq("id_tunanetra", req.params.id);
 
-  const { data: masihTerpasang } = await supabase
-    .from("perangkat")
-    .select("id_perangkat")
-    .eq("dipakai_oleh", req.params.id)
-    .single();
-  if (masihTerpasang) {
+  if (error?.code === "23503") {
     return res.status(409).json({
-      message: `Pengguna masih terhubung ke perangkat ${masihTerpasang.id_perangkat}. Lepas pemasangan dahulu.`,
+      message: "Pengguna masih terpasang di sebuah perangkat. Lepas pemasangannya dahulu.",
     });
   }
-
-  const { error } = await supabase
-    .from("pengguna_tunanetra")
-    .delete()
-    .eq("id_tunanetra", req.params.id)
-    .eq("id_yayasan", id_yayasan);
-  if (error) return res.status(400).json({ message: error.message });
+  if (error) return balasGalat(res, "PENGGUNA hapus", error);
+  if (!count) return res.status(404).json({ message: "Pengguna tidak ditemukan" });
   res.status(204).send();
 });
 

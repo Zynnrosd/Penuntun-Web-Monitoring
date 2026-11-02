@@ -1,50 +1,48 @@
+// backend/src/routes/notifikasi.routes.ts
+
 import { Router } from "express";
-import { supabase } from "../lib/supabase";
-import { requireAuth, getSession } from "../lib/auth";
-import { buatNotifikasiDarurat } from "../services/notifikasi.service";
+import { requireAuth, requireAktif, db } from "../lib/auth";
+import { balasGalat, balasGalatRpc } from "../lib/galat";
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth, requireAktif);
+
+const KOLOM =
+  "id_notifikasi, id_yayasan, id_perangkat, kode_insiden, nama_snapshot, tipe_event, status, ditangani_oleh, ditangani_pada, deskripsi, latitude_sos, longitude_sos, lokasi_sos, occurred_at, notifikasi_delivery(id_delivery, status, attempt_no, sent_at)";
 
 router.get("/", async (req, res) => {
-  const { id_yayasan } = getSession(req);
-  const { data, error } = await supabase
+  const { data, error } = await db(req)
     .from("notifikasi")
-    .select("*, perangkat!inner(id_yayasan), notifikasi_delivery(status, sent_at)")
-    .eq("perangkat.id_yayasan", id_yayasan)
-    .order("occurred_at", { ascending: false });
-  if (error) return res.status(500).json({ message: error.message });
+    .select(KOLOM)
+    .order("occurred_at", { ascending: false })
+    .limit(100);
+
+  if (error) return balasGalat(res, "NOTIFIKASI daftar", error);
   res.json(data);
 });
 
-router.post("/", async (req, res) => {
-  try {
-    const notif = await buatNotifikasiDarurat(req.body);
-    res.status(201).json(notif);
-  } catch (err) {
-    res.status(400).json({ message: err instanceof Error ? err.message : "Gagal membuat notifikasi" });
-  }
+router.patch("/:id/tangani", async (req, res) => {
+  const { data, error } = await db(req).rpc("tangani_insiden", { p_id: Number(req.params.id) });
+  if (error) return balasGalatRpc(res, "NOTIFIKASI tangani", error);
+  res.json(data);
+});
+
+router.patch("/:id/ambil-alih", async (req, res) => {
+  const { data, error } = await db(req).rpc("ambil_alih_insiden", { p_id: Number(req.params.id) });
+  if (error) return balasGalatRpc(res, "NOTIFIKASI ambil alih", error);
+  res.json(data);
 });
 
 router.patch("/:id/selesai", async (req, res) => {
-  const { id_yayasan } = getSession(req);
-
-  const { data: milik } = await supabase
-    .from("notifikasi")
-    .select("id_notifikasi, perangkat!inner(id_yayasan)")
-    .eq("id_notifikasi", req.params.id)
-    .eq("perangkat.id_yayasan", id_yayasan)
-    .single();
-  if (!milik) return res.status(404).json({ message: "Notifikasi tidak ditemukan" });
-
-  const { data, error } = await supabase
-    .from("notifikasi")
-    .update({ status: "SELESAI" })
-    .eq("id_notifikasi", req.params.id)
-    .select()
-    .single();
-  if (error) return res.status(400).json({ message: error.message });
+  const { data, error } = await db(req).rpc("selesaikan_insiden", { p_id: Number(req.params.id) });
+  if (error) return balasGalatRpc(res, "NOTIFIKASI selesai", error);
   res.json(data);
+});
+
+router.post("/delivery/:id/kirim-ulang", async (req, res) => {
+  const { data, error } = await db(req).rpc("kirim_ulang_delivery", { p_id: Number(req.params.id) });
+  if (error) return balasGalatRpc(res, "NOTIFIKASI kirim ulang", error);
+  res.json({ id_delivery: data, message: "Pengiriman ulang dijadwalkan" });
 });
 
 export default router;

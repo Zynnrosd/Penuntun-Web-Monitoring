@@ -1,102 +1,103 @@
+// backend/src/routes/geofence.routes.ts
+
 import { Router } from "express";
-import { supabase } from "../lib/supabase";
-import { requireAuth, requireRole, getSession } from "../lib/auth";
+import { requireAuth, requireAktif, requireRole, getSession, db } from "../lib/auth";
+import { balasGalat } from "../lib/galat";
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth, requireAktif);
+
+const RADIUS_MIN = 50;
+const RADIUS_MAX = 20000;
+
+const KOLOM = "id_geofence, id_yayasan, id_perangkat, nama_area, center_lat, center_long, radius_meter, is_active";
+
+function periksaIsian(body: unknown) {
+  const { nama_area, center_lat, center_long, radius_meter } = (body ?? {}) as Record<string, unknown>;
+
+  if (typeof center_lat !== "number" || typeof center_long !== "number") {
+    return "Titik pusat belum dipilih di peta";
+  }
+  if (center_lat < -90 || center_lat > 90 || center_long < -180 || center_long > 180) {
+    return "Titik pusat di luar jangkauan koordinat";
+  }
+  if (typeof radius_meter !== "number" || !Number.isFinite(radius_meter)) {
+    return "Radius wajib diisi";
+  }
+  if (radius_meter < RADIUS_MIN) return `Radius minimal ${RADIUS_MIN} meter`;
+  if (radius_meter > RADIUS_MAX) return `Radius maksimal ${RADIUS_MAX / 1000} kilometer`;
+  if (nama_area != null && typeof nama_area !== "string") return "Nama area tidak valid";
+
+  return null;
+}
+
+function nilaiZona(body: Record<string, unknown>) {
+  return {
+    nama_area: typeof body.nama_area === "string" && body.nama_area.trim() ? body.nama_area.trim() : null,
+    center_lat: body.center_lat as number,
+    center_long: body.center_long as number,
+    radius_meter: Math.round(body.radius_meter as number),
+  };
+}
 
 router.get("/", async (req, res) => {
-  const { id_yayasan } = getSession(req);
-  const { data, error } = await supabase
-    .from("geofence")
-    .select("*, perangkat!inner(id_yayasan)")
-    .eq("perangkat.id_yayasan", id_yayasan)
-    .eq("is_active", true);
-  if (error) return res.status(500).json({ message: error.message });
+  const { data, error } = await db(req).from("geofence").select(KOLOM).eq("is_active", true);
+  if (error) return balasGalat(res, "GEOFENCE daftar", error);
   res.json(data);
 });
 
-router.get("/:id_perangkat", async (req, res) => {
+router.put("/yayasan", requireRole("ADMINISTRATOR"), async (req, res) => {
+  const salah = periksaIsian(req.body);
+  if (salah) return res.status(400).json({ message: salah });
+
   const { id_yayasan } = getSession(req);
-
-  const { data: perangkat } = await supabase
-    .from("perangkat")
-    .select("id_perangkat")
-    .eq("id_perangkat", req.params.id_perangkat)
-    .eq("id_yayasan", id_yayasan)
-    .single();
-  if (!perangkat) return res.status(404).json({ message: "Perangkat tidak ditemukan" });
-
-  const { data, error } = await supabase
+  const { data, error } = await db(req)
     .from("geofence")
-    .select("*")
-    .eq("id_perangkat", req.params.id_perangkat)
-    .eq("is_active", true)
-    .maybeSingle();
-  if (error) return res.status(500).json({ message: error.message });
+    .upsert({ id_yayasan, id_perangkat: null, is_active: true, ...nilaiZona(req.body) }, { onConflict: "id_yayasan" })
+    .select(KOLOM)
+    .single();
+
+  if (error) return balasGalat(res, "GEOFENCE simpan zona yayasan", error);
   res.json(data);
 });
 
-router.put("/:id_perangkat", requireRole("administrator"), async (req, res) => {
+router.put("/:id_perangkat", requireRole("ADMINISTRATOR"), async (req, res) => {
+  const salah = periksaIsian(req.body);
+  if (salah) return res.status(400).json({ message: salah });
+
   const { id_yayasan } = getSession(req);
-  const { nama_area, center_lat, center_long, radius_meter } = req.body;
-
-  if (!nama_area?.trim()) return res.status(400).json({ message: "Nama area wajib diisi" });
-  if (typeof center_lat !== "number" || typeof center_long !== "number") {
-    return res.status(400).json({ message: "Titik pusat belum dipilih di peta" });
-  }
-  if (!radius_meter || radius_meter < 10) {
-    return res.status(400).json({ message: "Radius minimal 10 meter" });
-  }
-
-  const { data: perangkat } = await supabase
-    .from("perangkat")
-    .select("id_perangkat")
-    .eq("id_perangkat", req.params.id_perangkat)
-    .eq("id_yayasan", id_yayasan)
-    .single();
-  if (!perangkat) return res.status(404).json({ message: "Perangkat tidak ditemukan" });
-
-  const { data: existing } = await supabase
+  const { data, error } = await db(req)
     .from("geofence")
-    .select("id_geofence")
-    .eq("id_perangkat", req.params.id_perangkat)
-    .eq("is_active", true)
-    .maybeSingle();
-
-  if (existing) {
-    const { data, error } = await supabase
-      .from("geofence")
-      .update({ nama_area, center_lat, center_long, radius_meter })
-      .eq("id_geofence", existing.id_geofence)
-      .select()
-      .single();
-    if (error) return res.status(400).json({ message: error.message });
-    return res.json(data);
-  }
-
-  const { data, error } = await supabase
-    .from("geofence")
-    .insert({ id_perangkat: req.params.id_perangkat, nama_area, center_lat, center_long, radius_meter })
-    .select()
+    .upsert(
+      { id_yayasan, id_perangkat: req.params.id_perangkat, is_active: true, ...nilaiZona(req.body) },
+      { onConflict: "id_perangkat" }
+    )
+    .select(KOLOM)
     .single();
-  if (error) return res.status(400).json({ message: error.message });
-  res.status(201).json(data);
+
+  if (error) return balasGalat(res, "GEOFENCE simpan zona perangkat", error);
+  res.json(data);
 });
 
-router.delete("/:id_perangkat", requireRole("administrator"), async (req, res) => {
-  const { id_yayasan } = getSession(req);
+router.delete("/yayasan", requireRole("ADMINISTRATOR"), async (req, res) => {
+  const { error, count } = await db(req)
+    .from("geofence")
+    .delete({ count: "exact" })
+    .is("id_perangkat", null);
 
-  const { data: perangkat } = await supabase
-    .from("perangkat")
-    .select("id_perangkat")
-    .eq("id_perangkat", req.params.id_perangkat)
-    .eq("id_yayasan", id_yayasan)
-    .single();
-  if (!perangkat) return res.status(404).json({ message: "Perangkat tidak ditemukan" });
+  if (error) return balasGalat(res, "GEOFENCE hapus zona yayasan", error);
+  if (!count) return res.status(404).json({ message: "Zona yayasan belum diatur" });
+  res.status(204).send();
+});
 
-  const { error } = await supabase.from("geofence").delete().eq("id_perangkat", req.params.id_perangkat);
-  if (error) return res.status(400).json({ message: error.message });
+router.delete("/:id_perangkat", requireRole("ADMINISTRATOR"), async (req, res) => {
+  const { error, count } = await db(req)
+    .from("geofence")
+    .delete({ count: "exact" })
+    .eq("id_perangkat", req.params.id_perangkat);
+
+  if (error) return balasGalat(res, "GEOFENCE hapus zona perangkat", error);
+  if (!count) return res.status(404).json({ message: "Perangkat ini belum punya zona sendiri" });
   res.status(204).send();
 });
 

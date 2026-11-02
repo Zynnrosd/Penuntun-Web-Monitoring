@@ -1,214 +1,263 @@
+// frontend/src/app/(dashboard)/profil/page.tsx
+
 "use client";
 import { useEffect, useState } from "react";
-import { ShieldCheck, Building2, Mail, Lock, Eye, EyeOff } from "lucide-react";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { AlertCircle, Check } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { Field, TombolTampilkan } from "@/components/ui/Field";
+import type { Peran, StatusAkun } from "@/hooks/useSession";
 
-type ProfilResponse = {
+type Profil = {
   nama_staf: string;
-  email: string;
+  email: string | null;
   no_wa: string | null;
-  role: "administrator" | "pengawas";
-  yayasan: { nama_yayasan: string } | null;
+  role: Peran;
+  status: StatusAkun;
+  yayasan: { nama_yayasan: string; kota_yayasan: string } | null;
 };
 
-export default function ProfilPage() {
-  const [data, setData] = useState<ProfilResponse | null>(null);
-  const [nama, setNama] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [sukses, setSukses] = useState("");
+function Kabar({ nada, pesan }: { nada: "galat" | "sukses"; pesan: string }) {
+  return (
+    <p
+      role={nada === "galat" ? "alert" : "status"}
+      className={`flex items-start gap-2.5 rounded-inner px-4 py-3 text-sm leading-5 ${
+        nada === "galat" ? "bg-danger-soft text-danger-text" : "bg-success-soft text-success-text"
+      }`}
+    >
+      {nada === "galat" ? (
+        <AlertCircle size={18} className="mt-px flex-none" />
+      ) : (
+        <Check size={18} strokeWidth={2.6} className="mt-px flex-none" />
+      )}
+      {pesan}
+    </p>
+  );
+}
 
-  const [passwordBaru, setPasswordBaru] = useState("");
-  const [konfirmasiPassword, setKonfirmasiPassword] = useState("");
-  const [lihatPassword, setLihatPassword] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [errorPassword, setErrorPassword] = useState("");
-  const [suksesPassword, setSuksesPassword] = useState("");
+export default function ProfilPage() {
+  const [profil, setProfil] = useState<Profil | null>(null);
+  const [memuat, setMemuat] = useState(true);
+  const [galatMuat, setGalatMuat] = useState("");
+
+  const [nama, setNama] = useState("");
+  const [noWa, setNoWa] = useState("");
+
+  const [kabarNama, setKabarNama] = useState<{ nada: "galat" | "sukses"; pesan: string } | null>(null);
+  const [kabarWa, setKabarWa] = useState<{ nada: "galat" | "sukses"; pesan: string } | null>(null);
+  const [kabarSandi, setKabarSandi] = useState<{ nada: "galat" | "sukses"; pesan: string } | null>(null);
+
+  const [simpanNamaJalan, setSimpanNamaJalan] = useState(false);
+  const [simpanWaJalan, setSimpanWaJalan] = useState(false);
+  const [simpanSandiJalan, setSimpanSandiJalan] = useState(false);
+
+  const [sandi, setSandi] = useState("");
+  const [lihatSandi, setLihatSandi] = useState(false);
 
   useEffect(() => {
     api
-      .get<ProfilResponse>("/pengaturan/profil")
-      .then((res) => {
-        setData(res);
-        setNama(res.nama_staf);
+      .get<Profil>("/pengaturan/profil")
+      .then((data) => {
+        setProfil(data);
+        setNama(data.nama_staf ?? "");
+        setNoWa(data.no_wa ?? "");
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .catch((e) => setGalatMuat(e instanceof Error ? e.message : "Gagal memuat profil"))
+      .finally(() => setMemuat(false));
   }, []);
+
+  async function kirimProfil(namaBaru: string, waBaru: string) {
+    await api.patch("/pengaturan/profil", {
+      nama_staf: namaBaru.trim(),
+      no_wa: waBaru.trim() || null,
+    });
+    setProfil((p) => (p ? { ...p, nama_staf: namaBaru.trim(), no_wa: waBaru.trim() || null } : p));
+  }
 
   async function simpanNama(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    setSukses("");
-    setSaving(true);
+    setKabarNama(null);
+
+    if (!nama.trim()) {
+      setKabarNama({ nada: "galat", pesan: "Nama lengkap wajib diisi" });
+      return;
+    }
+
+    setSimpanNamaJalan(true);
     try {
-      await api.patch("/pengaturan/profil", { nama_staf: nama });
-      setSukses("Profil berhasil diperbarui");
-      setData((d) => (d ? { ...d, nama_staf: nama } : d));
+      await kirimProfil(nama, noWa);
+      setKabarNama({ nada: "sukses", pesan: "Nama tersimpan" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menyimpan");
+      setKabarNama({ nada: "galat", pesan: err instanceof Error ? err.message : "Gagal menyimpan nama" });
     } finally {
-      setSaving(false);
+      setSimpanNamaJalan(false);
     }
   }
 
-  async function gantiPassword(e: React.FormEvent) {
+  async function simpanWa(e: React.FormEvent) {
     e.preventDefault();
-    setErrorPassword("");
-    setSuksesPassword("");
+    setKabarWa(null);
+    setSimpanWaJalan(true);
+    try {
+      await kirimProfil(nama, noWa);
+      setKabarWa({
+        nada: "sukses",
+        pesan: noWa.trim() ? "Nomor WhatsApp tersimpan" : "Nomor WhatsApp dikosongkan",
+      });
+    } catch (err) {
+      setKabarWa({ nada: "galat", pesan: err instanceof Error ? err.message : "Gagal menyimpan nomor" });
+    } finally {
+      setSimpanWaJalan(false);
+    }
+  }
 
-    if (passwordBaru.length < 6) {
-      setErrorPassword("Kata sandi minimal 6 karakter");
+  async function gantiSandi(e: React.FormEvent) {
+    e.preventDefault();
+    setKabarSandi(null);
+
+    if (sandi.length < 6) {
+      setKabarSandi({ nada: "galat", pesan: "Kata sandi minimal 6 karakter" });
       return;
     }
-    if (passwordBaru !== konfirmasiPassword) {
-      setErrorPassword("Konfirmasi kata sandi tidak cocok");
-      return;
-    }
 
-    setSavingPassword(true);
-    const { error } = await supabase.auth.updateUser({ password: passwordBaru });
-    setSavingPassword(false);
+    setSimpanSandiJalan(true);
+    const { error } = await supabase.auth.updateUser({ password: sandi });
+    setSimpanSandiJalan(false);
 
     if (error) {
-      setErrorPassword(error.message);
+      setKabarSandi({
+        nada: "galat",
+        pesan: /different from the old/i.test(error.message)
+          ? "Kata sandi baru harus berbeda dari yang sekarang"
+          : "Gagal mengganti kata sandi. Coba lagi beberapa saat lagi.",
+      });
       return;
     }
-    setSuksesPassword("Kata sandi berhasil diubah");
-    setPasswordBaru("");
-    setKonfirmasiPassword("");
+
+    setSandi("");
+    setLihatSandi(false);
+    setKabarSandi({ nada: "sukses", pesan: "Kata sandi berhasil diganti" });
   }
 
-  if (loading) return <p className="text-text-secondary">Memuat data...</p>;
-  if (!data) return <p className="text-danger">Gagal memuat profil.</p>;
+  const judul = <PageHeader title="Profil akun" subtitle="Nama, nomor WhatsApp, dan kata sandi Anda" />;
 
-  const inisial = data.nama_staf.split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+  if (memuat) {
+    return (
+      <>
+        {judul}
+        <p className="text-[15px] text-text-secondary">Memuat profil…</p>
+      </>
+    );
+  }
+
+  if (!profil) {
+    return (
+      <>
+        {judul}
+        <p className="rounded-inner bg-danger-soft px-[18px] py-3.5 text-[15px] text-danger-text">
+          Gagal memuat profil{galatMuat && `: ${galatMuat}`}
+        </p>
+      </>
+    );
+  }
 
   return (
-    <div>
-      <PageHeader title="Profil Akun" subtitle="Informasi akun dan peran Anda di sistem" />
+    <>
+      {judul}
 
-      <div className="mb-6 flex flex-col items-start gap-5 rounded-card bg-secondary p-7 text-white sm:flex-row sm:items-center">
-        <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xl font-bold">
-          {inisial}
-        </div>
-        <div className="flex-1">
-          <div className="text-xl font-semibold">{data.nama_staf}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-white/70">
-            <span className="inline-flex items-center gap-1 rounded-pill bg-white/15 px-2.5 py-1 text-xs font-medium">
-              <ShieldCheck size={12} /> {data.role === "administrator" ? "Administrator" : "Pengawas"}
-            </span>
-            <span>{data.yayasan?.nama_yayasan ?? "Tanpa yayasan"}</span>
-          </div>
-        </div>
-      </div>
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        <section className="flex flex-col gap-4 rounded-card border-2 border-border bg-surface p-6">
+          <h2 className="text-[22px] font-extrabold leading-7">Data akun</h2>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          {/* Form nama */}
-          <div className="rounded-card bg-surface p-6 shadow-card">
-            <h2 className="mb-4 text-lg font-semibold text-text-primary">Ubah Nama Tampilan</h2>
+          <form onSubmit={simpanNama} className="flex flex-col gap-4">
+            <Field
+              label="Nama lengkap"
+              value={nama}
+              onChange={(e) => setNama(e.target.value)}
+              autoComplete="name"
+              required
+            />
 
-            {error && <div className="mb-4 rounded-input bg-danger-soft px-3 py-2 text-sm text-danger">{error}</div>}
-            {sukses && <div className="mb-4 rounded-input bg-success-soft px-3 py-2 text-sm text-success">{sukses}</div>}
+            <div>
+              <span className="mb-1.5 block text-sm font-bold">Email</span>
+              <p className="flex h-[46px] items-center rounded-field bg-field px-4 text-[15px] text-text-secondary">
+                {profil.email ?? "—"}
+              </p>
+              <p className="mt-1.5 text-sm text-text-secondary">Email tidak bisa diubah.</p>
+            </div>
 
-            <form onSubmit={simpanNama} className="max-w-md">
-              <label className="mb-1 block text-sm font-medium text-text-secondary">Nama Lengkap</label>
-              <input
-                required
-                value={nama}
-                onChange={(e) => setNama(e.target.value)}
-                className="mb-4 w-full rounded-input border border-border px-3 py-2 text-sm outline-none focus:border-primary"
-              />
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded-input bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-              >
-                {saving ? "Menyimpan..." : "Simpan perubahan"}
-              </button>
-            </form>
-          </div>
+            {kabarNama && <Kabar {...kabarNama} />}
 
-          {/* Form ganti password */}
-          <div className="rounded-card bg-surface p-6 shadow-card">
-            <h2 className="mb-1 text-lg font-semibold text-text-primary">Ganti Kata Sandi</h2>
-            <p className="mb-4 text-sm text-text-secondary">Minimal 6 karakter.</p>
+            <Button type="submit" disabled={simpanNamaJalan} className="self-start">
+              {simpanNamaJalan ? "Menyimpan…" : "Simpan nama"}
+            </Button>
+          </form>
 
-            {errorPassword && <div className="mb-4 rounded-input bg-danger-soft px-3 py-2 text-sm text-danger">{errorPassword}</div>}
-            {suksesPassword && <div className="mb-4 rounded-input bg-success-soft px-3 py-2 text-sm text-success">{suksesPassword}</div>}
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 border-t border-border pt-4 text-sm leading-5">
+            <dt className="text-text-secondary">Peran</dt>
+            <dd className="text-right font-bold">
+              {profil.role === "ADMINISTRATOR" ? "Administrator" : "Pengawas"}
+            </dd>
 
-            <form onSubmit={gantiPassword} className="max-w-md">
-              <label className="mb-1 block text-sm font-medium text-text-secondary">Kata Sandi Baru</label>
-              <div className="relative mb-4">
-                <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+            <dt className="text-text-secondary">Yayasan</dt>
+            <dd className="text-right font-bold">
+              {profil.yayasan ? `${profil.yayasan.nama_yayasan}, ${profil.yayasan.kota_yayasan}` : "—"}
+            </dd>
+          </dl>
+        </section>
+
+        <div className="flex flex-col gap-5">
+          <section className="flex flex-col gap-3.5 rounded-card border-2 border-border bg-surface p-6">
+            <h2 className="text-[22px] font-extrabold leading-7">Nomor WhatsApp saya</h2>
+            <p className="text-sm leading-5 text-text-secondary">
+              Pesan SOS dikirim ke nomor ini. Kosongkan jika Anda tidak ingin menerima pesan.
+            </p>
+
+            <form onSubmit={simpanWa} className="flex flex-col gap-3.5">
+              <div className="flex flex-wrap gap-2.5">
                 <input
-                  type={lihatPassword ? "text" : "password"}
-                  required
-                  minLength={6}
-                  value={passwordBaru}
-                  onChange={(e) => setPasswordBaru(e.target.value)}
-                  placeholder="Minimal 6 karakter"
-                  className="w-full rounded-input border border-border py-2 pl-9 pr-10 text-sm outline-none focus:border-primary"
+                  value={noWa}
+                  onChange={(e) => setNoWa(e.target.value)}
+                  placeholder="+62812XXXXXXX"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  aria-label="Nomor WhatsApp saya"
+                  className="data h-[46px] min-w-[200px] flex-1 rounded-field bg-field px-4 text-[15px] outline-none focus:bg-surface focus:shadow-[inset_0_0_0_2px_var(--color-ring)]"
                 />
-                <button
-                  type="button"
-                  onClick={() => setLihatPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary"
-                >
-                  {lihatPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
+                <Button type="submit" disabled={simpanWaJalan}>
+                  {simpanWaJalan ? "Menyimpan…" : "Simpan"}
+                </Button>
               </div>
 
-              <label className="mb-1 block text-sm font-medium text-text-secondary">Konfirmasi Kata Sandi Baru</label>
-              <input
-                type={lihatPassword ? "text" : "password"}
-                required
-                minLength={6}
-                value={konfirmasiPassword}
-                onChange={(e) => setKonfirmasiPassword(e.target.value)}
-                placeholder="Ulangi kata sandi baru"
-                className="mb-4 w-full rounded-input border border-border px-3 py-2 text-sm outline-none focus:border-primary"
+              {kabarWa && <Kabar {...kabarWa} />}
+            </form>
+          </section>
+
+          <section className="flex flex-col gap-3.5 rounded-card border-2 border-border bg-surface p-6">
+            <h2 className="text-[22px] font-extrabold leading-7">Ganti kata sandi</h2>
+
+            <form onSubmit={gantiSandi} className="flex flex-col gap-3.5">
+              <Field
+                label="Kata sandi baru"
+                type={lihatSandi ? "text" : "password"}
+                value={sandi}
+                onChange={(e) => setSandi(e.target.value)}
+                autoComplete="new-password"
+                hint="Minimal 6 karakter."
+                trailing={<TombolTampilkan aktif={lihatSandi} onToggle={() => setLihatSandi((v) => !v)} />}
               />
 
-              <button
-                type="submit"
-                disabled={savingPassword}
-                className="rounded-input bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-              >
-                {savingPassword ? "Menyimpan..." : "Ganti Kata Sandi"}
-              </button>
-            </form>
-          </div>
-        </div>
+              {kabarSandi && <Kabar {...kabarSandi} />}
 
-        <div className="rounded-card bg-surface p-6 shadow-card">
-          <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-secondary">Detail Akun</h3>
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-input bg-primary-soft text-primary">
-                <Mail size={18} />
-              </div>
-              <div>
-                <div className="text-xs text-text-secondary">Email</div>
-                <div className="break-all font-medium text-text-primary">{data.email}</div>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-input bg-success-soft text-success">
-                <Building2 size={18} />
-              </div>
-              <div>
-                <div className="text-xs text-text-secondary">Yayasan</div>
-                <div className="font-medium text-text-primary">{data.yayasan?.nama_yayasan ?? "-"}</div>
-              </div>
-            </div>
-          </div>
+              <Button type="submit" disabled={simpanSandiJalan} className="self-start">
+                {simpanSandiJalan ? "Mengganti…" : "Ganti kata sandi"}
+              </Button>
+            </form>
+          </section>
         </div>
       </div>
-    </div>
+    </>
   );
 }

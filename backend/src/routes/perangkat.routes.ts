@@ -1,97 +1,77 @@
+// backend/src/routes/perangkat.routes.ts
+
 import { Router } from "express";
-import { supabase } from "../lib/supabase";
-import { requireAuth, requireRole, getSession } from "../lib/auth";
+import { requireAuth, requireAktif, requireRole, getSession, db } from "../lib/auth";
+import { balasGalat, balasGalatRpc } from "../lib/galat";
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth, requireAktif);
+
+const KOLOM =
+  "id_perangkat, id_yayasan, dipakai_oleh, dipasang_oleh, dipasang_pada, lat_terakhir, long_terakhir, lokasi_terakhir, baterai_terakhir, status_online, status_sos, last_active, pengguna:pengguna_tunanetra!perangkat_pemakai_fk(nama_tunanetra)";
 
 router.get("/", async (req, res) => {
-  const { id_yayasan } = getSession(req);
-  const { data, error } = await supabase.from("perangkat").select("*").eq("id_yayasan", id_yayasan);
-  if (error) return res.status(500).json({ message: error.message });
+  const { data, error } = await db(req).from("perangkat").select(KOLOM).order("id_perangkat");
+  if (error) return balasGalat(res, "PERANGKAT daftar", error);
   res.json(data);
 });
 
 router.get("/:id/riwayat", async (req, res) => {
-  const { id_yayasan } = getSession(req);
-
-  const { data: perangkat } = await supabase
-    .from("perangkat")
-    .select("id_perangkat")
-    .eq("id_perangkat", req.params.id)
-    .eq("id_yayasan", id_yayasan)
-    .single();
-  if (!perangkat) return res.status(404).json({ message: "Perangkat tidak ditemukan" });
-
-  const { data, error } = await supabase
+  const { data, error } = await db(req)
     .from("tracking_data")
     .select("id_tracking, latitude, longitude, baterai, recorded_at")
     .eq("id_perangkat", req.params.id)
     .order("recorded_at", { ascending: false })
     .limit(200);
 
-  if (error) return res.status(500).json({ message: error.message });
+  if (error) return balasGalat(res, "PERANGKAT riwayat", error);
   res.json(data);
 });
 
-router.post("/", requireRole("administrator"), async (req, res) => {
-  const { id_yayasan } = getSession(req);
+router.post("/", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { id_perangkat } = req.body;
-  if (!id_perangkat?.trim()) return res.status(400).json({ message: "ID Perangkat wajib diisi" });
+  if (typeof id_perangkat !== "string" || !id_perangkat.trim()) {
+    return res.status(400).json({ message: "Serial number perangkat wajib diisi" });
+  }
 
-  const { data: existing } = await supabase.from("perangkat").select("id_perangkat").eq("id_perangkat", id_perangkat).single();
-  if (existing) return res.status(409).json({ message: "Serial number ini sudah terdaftar" });
+  const { id_yayasan } = getSession(req);
+  const { data, error } = await db(req)
+    .from("perangkat")
+    .insert({ id_perangkat: id_perangkat.trim(), id_yayasan })
+    .select(KOLOM)
+    .single();
 
-  const { data, error } = await supabase.from("perangkat").insert({ id_perangkat, id_yayasan }).select().single();
-  if (error) return res.status(400).json({ message: error.message });
+  if (error?.code === "23505") {
+    return res.status(409).json({ message: "Serial number ini sudah terdaftar" });
+  }
+  if (error) return balasGalat(res, "PERANGKAT tambah", error);
   res.status(201).json(data);
 });
 
-router.patch("/:id/pairing", requireRole("administrator"), async (req, res) => {
-  const { id_yayasan } = getSession(req);
-  const { dipakai_oleh } = req.body;
+router.patch("/:id/pairing", async (req, res) => {
+  const { dipakai_oleh, dipasang_pada_sebelumnya } = req.body;
 
-  const { data: perangkatTarget } = await supabase
-    .from("perangkat")
-    .select("id_perangkat")
-    .eq("id_perangkat", req.params.id)
-    .eq("id_yayasan", id_yayasan)
-    .single();
-  if (!perangkatTarget) return res.status(404).json({ message: "Perangkat tidak ditemukan" });
-
-  if (dipakai_oleh) {
-    const { data: sudahDipakai } = await supabase
-      .from("perangkat")
-      .select("id_perangkat")
-      .eq("dipakai_oleh", dipakai_oleh)
-      .neq("id_perangkat", req.params.id)
-      .single();
-    if (sudahDipakai) {
-      return res.status(409).json({
-        message: `Pengguna ini sudah dipasangkan ke perangkat ${sudahDipakai.id_perangkat}. Lepas pemasangan itu dahulu.`,
-      });
-    }
+  if (dipakai_oleh != null && typeof dipakai_oleh !== "string") {
+    return res.status(400).json({ message: "Pengguna tidak valid" });
   }
 
-  const { data, error } = await supabase
-    .from("perangkat")
-    .update({ dipakai_oleh: dipakai_oleh || null })
-    .eq("id_perangkat", req.params.id)
-    .eq("id_yayasan", id_yayasan)
-    .select()
-    .single();
-  if (error) return res.status(400).json({ message: error.message });
+  const { data, error } = await db(req).rpc("pasangkan_perangkat", {
+    p_id_perangkat: req.params.id,
+    p_id_tunanetra: dipakai_oleh ?? null,
+    p_dipasang_pada_sebelumnya: dipasang_pada_sebelumnya ?? null,
+  });
+
+  if (error) return balasGalatRpc(res, "PERANGKAT pairing", error);
   res.json(data);
 });
 
-router.delete("/:id", requireRole("administrator"), async (req, res) => {
-  const { id_yayasan } = getSession(req);
-  const { error, count } = await supabase
+router.delete("/:id", requireRole("ADMINISTRATOR"), async (req, res) => {
+  const { error, count } = await db(req)
     .from("perangkat")
     .delete({ count: "exact" })
-    .eq("id_perangkat", req.params.id)
-    .eq("id_yayasan", id_yayasan);
-  if (error) return res.status(400).json({ message: error.message });
+    .eq("id_perangkat", req.params.id);
+
+  if (error) return balasGalat(res, "PERANGKAT hapus", error);
   if (!count) return res.status(404).json({ message: "Perangkat tidak ditemukan" });
   res.status(204).send();
 });

@@ -1,33 +1,51 @@
+// frontend/src/lib/api-client.ts
+
 import { supabase } from "./supabase";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL!;
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new ApiError("Tidak dapat menghubungi server. Pastikan server berjalan.", 0);
+  }
 
   if (!res.ok) {
     let message = "Terjadi kesalahan";
+    let code: string | undefined;
     try {
       const body = await res.json();
       message = body.message ?? message;
-    } catch {
-    }
-    throw new Error(message);
+      code = body.code;
+    } catch {}
+    throw new ApiError(message, res.status, code);
   }
 
-  if (res.status === 204) {
-    return undefined as T;
-  }
+  if (res.status === 204) return undefined as T;
 
   return res.json();
 }

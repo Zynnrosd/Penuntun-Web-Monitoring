@@ -1,1800 +1,390 @@
+// frontend/src/app/(dashboard)/perangkat/page.tsx
+
 "use client";
-
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
-
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-
-import {
-  Search,
-  Trash2,
-  ShieldCheck,
-  Wifi,
-  WifiOff,
-} from "lucide-react";
-
-import { PageHeader } from "@/components/layout/PageHeader";
-import { StatCard } from "@/components/dashboard/StatCard";
-import { Modal } from "@/components/ui/Modal";
-
+import { Plus, Trash2, AlertCircle } from "lucide-react";
 import { api } from "@/lib/api-client";
-import { useRealtimeTable } from "@/hooks/useRealtimeTable";
+import { useSession } from "@/hooks/useSession";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { StatusPill } from "@/components/dashboard/StatusPill";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { Modal } from "@/components/ui/Modal";
+import { waktuRelatif } from "@/lib/format";
+import type { Perangkat, PenggunaTunanetra, Geofence } from "@/types";
 
-import type {
-  Perangkat,
-  PenggunaTunanetra,
-  Geofence,
-} from "@/types";
+const PetaZona = dynamic(() => import("@/components/map/GeofenceMapPicker").then((m) => m.GeofenceMapPicker), {
+  ssr: false,
+  loading: () => <div className="h-full w-full rounded-map bg-surface-sunken" />,
+});
 
+const RADIUS_MIN = 50;
+const PUSAT_AWAL = { lat: -6.9932, lng: 110.4203 };
 
-// =========================================================
-// MAP
-// =========================================================
-
-const GeofenceMapPicker = dynamic(
-  () =>
-    import("@/components/map/GeofenceMapPicker").then(
-      (m) => m.GeofenceMapPicker
-    ),
-  {
-    ssr: false,
-  }
-);
-
-
-// =========================================================
-// HELPER
-// =========================================================
-
-function inisial(
-  nama: string
-) {
-  return nama
-    .split(" ")
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
-
-// =========================================================
-// PAGE
-// =========================================================
+type Tab = "perangkat" | "zona";
 
 export default function PerangkatPage() {
+  const { sesi } = useSession();
+  const isAdmin = sesi?.role === "ADMINISTRATOR";
 
-  // =======================================================
-  // DATA
-  // =======================================================
+  const [tab, setTab] = useState<Tab>("perangkat");
+  const [perangkat, setPerangkat] = useState<Perangkat[]>([]);
+  const [pengguna, setPengguna] = useState<PenggunaTunanetra[]>([]);
+  const [zonaYayasan, setZonaYayasan] = useState<Geofence | null>(null);
+  const [memuat, setMemuat] = useState(true);
+  const [galat, setGalat] = useState("");
 
-  const [
-    data,
-    setData,
-  ] = useState<Perangkat[]>([]);
+  const [tambah, setTambah] = useState(false);
+  const [serial, setSerial] = useState("");
+  const [hapus, setHapus] = useState<Perangkat | null>(null);
+  const [galatAksi, setGalatAksi] = useState("");
+  const [sibuk, setSibuk] = useState(false);
 
+  const [pusat, setPusat] = useState(PUSAT_AWAL);
+  const [radius, setRadius] = useState(300);
+  const [pesanZona, setPesanZona] = useState("");
 
-  const [
-    pengguna,
-    setPengguna,
-  ] = useState<
-    PenggunaTunanetra[]
-  >([]);
+  const muat = useCallback(() => {
+    Promise.all([
+      api.get<Perangkat[]>("/perangkat"),
+      api.get<PenggunaTunanetra[]>("/pengguna").catch(() => [] as PenggunaTunanetra[]),
+      api.get<Geofence[]>("/geofence").catch(() => [] as Geofence[]),
+    ])
+      .then(([p, u, g]) => {
+        setPerangkat(p);
+        setPengguna(u);
 
+        const zona = g.find((z) => z.id_perangkat === null) ?? null;
+        setZonaYayasan(zona);
+        if (zona) {
+          setPusat({ lat: Number(zona.center_lat), lng: Number(zona.center_long) });
+          setRadius(zona.radius_meter);
+        }
+      })
+      .catch((e) => setGalat(e instanceof Error ? e.message : "Gagal memuat data"))
+      .finally(() => setMemuat(false));
+  }, []);
 
-  const [
-    loading,
-    setLoading,
-  ] = useState(true);
+  useEffect(muat, [muat]);
 
-
-  const [
-    error,
-    setError,
-  ] = useState("");
-
-
-  // =======================================================
-  // MODAL TAMBAH PERANGKAT
-  // =======================================================
-
-  const [
-    modalTambah,
-    setModalTambah,
-  ] = useState(false);
-
-
-  const [
-    idBaru,
-    setIdBaru,
-  ] = useState("");
-
-
-  const [
-    formError,
-    setFormError,
-  ] = useState("");
-
-
-  // =======================================================
-  // HAPUS PERANGKAT
-  // =======================================================
-
-  const [
-    hapusTarget,
-    setHapusTarget,
-  ] = useState<
-    Perangkat | null
-  >(null);
-
-
-  // =======================================================
-  // GEOFENCE
-  // =======================================================
-
-  const [
-    geofenceTarget,
-    setGeofenceTarget,
-  ] = useState<
-    Perangkat | null
-  >(null);
-
-
-  const [
-    geofenceLoading,
-    setGeofenceLoading,
-  ] = useState(false);
-
-
-  const [
-    geofenceError,
-    setGeofenceError,
-  ] = useState("");
-
-
-  const [
-    namaArea,
-    setNamaArea,
-  ] = useState("");
-
-
-  const [
-    titikPusat,
-    setTitikPusat,
-  ] = useState<{
-    lat: number;
-    lng: number;
-  } | null>(
-    null
-  );
-
-
-  const [
-    radius,
-    setRadius,
-  ] = useState(300);
-
-
-  const [
-    geofenceAda,
-    setGeofenceAda,
-  ] = useState(false);
-
-
-  // =======================================================
-  // LOAD DATA
-  // =======================================================
-
-  const muat =
-    useCallback(
-      () => {
-
-        Promise.all([
-          api.get<
-            Perangkat[]
-          >(
-            "/perangkat"
-          ),
-
-          api
-            .get<
-              PenggunaTunanetra[]
-            >(
-              "/pengguna"
-            )
-            .catch(
-              () => []
-            ),
-        ])
-          .then(
-            (
-              [
-                perangkatData,
-                penggunaData,
-              ]
-            ) => {
-
-              setData(
-                perangkatData
-              );
-
-              setPengguna(
-                penggunaData
-              );
-
-              setError("");
-
-            }
-          )
-          .catch(
-            (err) => {
-
-              setError(
-                err instanceof Error
-                  ? err.message
-                  : "Gagal memuat data"
-              );
-
-            }
-          )
-          .finally(
-            () => {
-
-              setLoading(
-                false
-              );
-
-            }
-          );
-
-      },
-      []
-    );
-
-
-  // =======================================================
-  // INITIAL LOAD
-  // =======================================================
-
-  useEffect(
-    () => {
-
+  async function pasangkan(p: Perangkat, idPengguna: string) {
+    setGalatAksi("");
+    try {
+      await api.patch(`/perangkat/${p.id_perangkat}/pairing`, {
+        dipakai_oleh: idPengguna || null,
+        dipasang_pada_sebelumnya: p.dipasang_pada,
+      });
       muat();
+    } catch (err) {
+      setGalatAksi(err instanceof Error ? err.message : "Gagal mengubah pemasangan");
+    }
+  }
 
-    },
-    [
-      muat,
-    ]
-  );
-
-
-  // =======================================================
-  // SUPABASE REALTIME
-  // =======================================================
-  //
-  // Setiap tabel perangkat berubah:
-  //
-  // heartbeat
-  //     ↓
-  // backend
-  //     ↓
-  // Supabase
-  //     ↓
-  // realtime
-  //     ↓
-  // muat()
-  //
-  // Jadi Online / Offline berubah otomatis.
-  // =======================================================
-
-  useRealtimeTable(
-    "perangkat",
-    muat
-  );
-
-
-  // =======================================================
-  // TAMBAH PERANGKAT
-  // =======================================================
-
-  async function tambahPerangkat(
-    e: React.FormEvent
-  ) {
-
+  async function tambahPerangkat(e: React.FormEvent) {
     e.preventDefault();
-
-
-    setFormError("");
-
-
+    setGalatAksi("");
+    setSibuk(true);
     try {
-
-      await api.post(
-        "/perangkat",
-        {
-          id_perangkat:
-            idBaru,
-        }
-      );
-
-
-      setModalTambah(
-        false
-      );
-
-
-      setIdBaru("");
-
-
+      await api.post("/perangkat", { id_perangkat: serial });
+      setTambah(false);
+      setSerial("");
       muat();
-
-
     } catch (err) {
-
-      setFormError(
-        err instanceof Error
-          ? err.message
-          : "Gagal menambah perangkat"
-      );
-
+      setGalatAksi(err instanceof Error ? err.message : "Gagal menambah perangkat");
+    } finally {
+      setSibuk(false);
     }
-
   }
-
-
-  // =======================================================
-  // PAIRING
-  // =======================================================
-
-  async function ubahPairing(
-    idPerangkat: string,
-    dipakaiOleh: string
-  ) {
-
-    try {
-
-      await api.patch(
-        `/perangkat/${idPerangkat}/pairing`,
-        {
-          dipakai_oleh:
-            dipakaiOleh || null,
-        }
-      );
-
-
-      muat();
-
-
-    } catch (err) {
-
-      alert(
-        err instanceof Error
-          ? err.message
-          : "Gagal mengubah pairing"
-      );
-
-    }
-
-  }
-
-
-  // =======================================================
-  // HAPUS PERANGKAT
-  // =======================================================
 
   async function konfirmasiHapus() {
-
-    if (
-      !hapusTarget
-    ) {
-      return;
-    }
-
-
+    if (!hapus) return;
+    setGalatAksi("");
+    setSibuk(true);
     try {
-
-      await api.delete(
-        `/perangkat/${hapusTarget.id_perangkat}`
-      );
-
-
-      setHapusTarget(
-        null
-      );
-
-
+      await api.delete(`/perangkat/${hapus.id_perangkat}`);
+      setHapus(null);
       muat();
-
-
     } catch (err) {
-
-      alert(
-        err instanceof Error
-          ? err.message
-          : "Gagal menghapus"
-      );
-
-
-      setHapusTarget(
-        null
-      );
-
+      setGalatAksi(err instanceof Error ? err.message : "Gagal menghapus perangkat");
+    } finally {
+      setSibuk(false);
     }
-
   }
 
-
-  // =======================================================
-  // BUKA GEOFENCE
-  // =======================================================
-
-  function bukaGeofence(
-    p: Perangkat
-  ) {
-
-    setGeofenceTarget(
-      p
-    );
-
-
-    setGeofenceError("");
-
-
-    setNamaArea("");
-
-
-    setTitikPusat(
-      null
-    );
-
-
-    setRadius(
-      300
-    );
-
-
-    setGeofenceAda(
-      false
-    );
-
-
-    setGeofenceLoading(
-      true
-    );
-
-
-    api
-      .get<
-        Geofence | null
-      >(
-        `/geofence/${p.id_perangkat}`
-      )
-
-      .then(
-        (g) => {
-
-          if (g) {
-
-            setNamaArea(
-              g.nama_area
-            );
-
-
-            setTitikPusat({
-              lat:
-                g.center_lat,
-
-              lng:
-                g.center_long,
-            });
-
-
-            setRadius(
-              g.radius_meter
-            );
-
-
-            setGeofenceAda(
-              true
-            );
-
-
-          } else if (
-            p.lat_terakhir != null &&
-            p.long_terakhir != null
-          ) {
-
-            setTitikPusat({
-              lat:
-                p.lat_terakhir,
-
-              lng:
-                p.long_terakhir,
-            });
-
-          }
-
-        }
-      )
-
-      .catch(
-        (err) => {
-
-          setGeofenceError(
-            err instanceof Error
-              ? err.message
-              : "Gagal memuat geofence"
-          );
-
-        }
-      )
-
-      .finally(
-        () => {
-
-          setGeofenceLoading(
-            false
-          );
-
-        }
-      );
-
-  }
-
-
-  // =======================================================
-  // SIMPAN GEOFENCE
-  // =======================================================
-
-  async function simpanGeofence(
-    e: React.FormEvent
-  ) {
-
-    e.preventDefault();
-
-
-    if (
-      !geofenceTarget
-    ) {
-      return;
-    }
-
-
-    setGeofenceError("");
-
-
-    if (
-      !titikPusat
-    ) {
-
-      setGeofenceError(
-        "Klik di peta untuk menentukan titik pusat zona aman"
-      );
-
-      return;
-
-    }
-
-
+  async function simpanZona() {
+    setPesanZona("");
+    setGalatAksi("");
+    setSibuk(true);
     try {
-
-      await api.put(
-        `/geofence/${geofenceTarget.id_perangkat}`,
-        {
-          nama_area:
-            namaArea,
-
-          center_lat:
-            titikPusat.lat,
-
-          center_long:
-            titikPusat.lng,
-
-          radius_meter:
-            radius,
-        }
-      );
-
-
-      setGeofenceTarget(
-        null
-      );
-
-
+      const zona = await api.put<Geofence>("/geofence/yayasan", {
+        nama_area: zonaYayasan?.nama_area ?? null,
+        center_lat: pusat.lat,
+        center_long: pusat.lng,
+        radius_meter: radius,
+      });
+      setZonaYayasan(zona);
+      setPesanZona("Zona aman tersimpan.");
     } catch (err) {
-
-      setGeofenceError(
-        err instanceof Error
-          ? err.message
-          : "Gagal menyimpan zona aman"
-      );
-
+      setGalatAksi(err instanceof Error ? err.message : "Gagal menyimpan zona");
+    } finally {
+      setSibuk(false);
     }
-
   }
 
+  const judul = <PageHeader title="Data perangkat" subtitle="Kelola tongkat PENUNTUN yang terdaftar" />;
 
-  // =======================================================
-  // HAPUS GEOFENCE
-  // =======================================================
-
-  async function hapusGeofence() {
-
-    if (
-      !geofenceTarget
-    ) {
-      return;
-    }
-
-
-    try {
-
-      await api.delete(
-        `/geofence/${geofenceTarget.id_perangkat}`
-      );
-
-
-      setGeofenceTarget(
-        null
-      );
-
-
-    } catch (err) {
-
-      setGeofenceError(
-        err instanceof Error
-          ? err.message
-          : "Gagal menghapus zona aman"
-      );
-
-    }
-
-  }
-
-
-  // =======================================================
-  // HELPERS
-  // =======================================================
-
-  function namaPengguna(
-    id: string | null
-  ) {
-
+  if (memuat) {
     return (
-      pengguna.find(
-        (u) =>
-          u.id_tunanetra ===
-          id
-      )
-        ?.nama_tunanetra
-      ??
-      null
+      <>
+        {judul}
+        <p className="text-[15px] text-text-secondary">Memuat data…</p>
+      </>
     );
-
   }
 
-
-  // =======================================================
-  // LOADING
-  // =======================================================
-
-  if (
-    loading
-  ) {
-
+  if (galat) {
     return (
-      <p
-        className="
-          text-text-secondary
-        "
-      >
-        Memuat data...
-      </p>
+      <>
+        {judul}
+        <p className="rounded-inner bg-danger-soft px-[18px] py-3.5 text-[15px] text-danger-text">
+          Gagal memuat data perangkat: {galat}
+        </p>
+      </>
     );
-
   }
-
-
-  // =======================================================
-  // ERROR
-  // =======================================================
-
-  if (
-    error
-  ) {
-
-    return (
-      <p
-        className="
-          text-danger
-        "
-      >
-        Gagal memuat: {error}
-      </p>
-    );
-
-  }
-
-
-  // =======================================================
-  // UI
-  // =======================================================
 
   return (
+    <>
+      {judul}
 
-    <div>
-
-      {/* =================================================
-          HEADER
-      ================================================= */}
-
-      <PageHeader
-        title="Manajemen Perangkat"
-        subtitle="Kelola data perangkat, pairing, dan zona aman"
-      />
-
-
-      {/* =================================================
-          STATISTICS
-      ================================================= */}
-
-      <div
-        className="
-          mb-6
-          grid
-          grid-cols-1
-          gap-4
-          sm:grid-cols-2
-        "
-      >
-
-        <StatCard
-          label="Total Perangkat"
-          value={
-            data.length
-          }
-          tone="primary"
-          suffix="Terhubung"
-        />
-
-
-        <StatCard
-          label="Total Pengguna Terpasang"
-          value={
-            data.filter(
-              (d) =>
-                d.dipakai_oleh
-            ).length
-          }
-          tone="success"
-          suffix="Pengguna"
-        />
-
-      </div>
-
-
-      {/* =================================================
-          TABLE CARD
-      ================================================= */}
-
-      <div
-        className="
-          rounded-card
-          bg-surface
-          p-5
-          shadow-card
-        "
-      >
-
-        {/* ===============================================
-            TABLE HEADER
-        =============================================== */}
-
-        <div
-          className="
-            mb-4
-            flex
-            flex-col
-            gap-3
-            lg:flex-row
-            lg:items-center
-            lg:justify-between
-          "
-        >
-
-          <h2
-            className="
-              text-lg
-              font-semibold
-              text-text-primary
-            "
-          >
-            Manajemen Perangkat & Pengguna
-          </h2>
-
-
-          <div
-            className="
-              flex
-              flex-col
-              gap-3
-              sm:flex-row
-              sm:items-center
-            "
-          >
-
-            {/* SEARCH */}
-
-            <div
-              className="
-                relative
-              "
-            >
-
-              <Search
-                size={16}
-
-                className="
-                  absolute
-                  left-3
-                  top-1/2
-                  -translate-y-1/2
-                  text-text-secondary
-                "
-              />
-
-
-              <input
-                placeholder="Cari Pengguna"
-
-                className="
-                  w-full
-                  rounded-pill
-                  border
-                  border-border
-                  py-2
-                  pl-9
-                  pr-3
-                  text-sm
-                  sm:w-auto
-                "
-              />
-
-            </div>
-
-
-            {/* ADD DEVICE */}
-
-            <button
-              type="button"
-
-              onClick={
-                () => {
-
-                  setIdBaru("");
-
-                  setFormError("");
-
-                  setModalTambah(
-                    true
-                  );
-
-                }
-              }
-
-              className="
-                rounded-input
-                bg-primary
-                px-4
-                py-2
-                text-sm
-                font-medium
-                text-white
-                hover:bg-primary-hover
-              "
-            >
-              + Tambah Perangkat
-            </button>
-
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-1 rounded-pill bg-field p-1" role="tablist" aria-label="Tampilan perangkat">
+            {([["perangkat", "Perangkat"], ["zona", "Zona aman"]] as const).map(([nilai, label]) => (
+              <button
+                key={nilai}
+                role="tab"
+                aria-selected={tab === nilai}
+                onClick={() => setTab(nilai)}
+                className={`h-9 rounded-pill px-5 text-sm font-bold transition-colors ${
+                  tab === nilai ? "bg-secondary text-white" : "text-text-secondary"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
+          {tab === "perangkat" && isAdmin && (
+            <Button onClick={() => setTambah(true)}>
+              <Plus size={16} strokeWidth={2.5} />
+              Tambah perangkat
+            </Button>
+          )}
         </div>
 
-
-        {/* ===============================================
-            TABLE
-        =============================================== */}
-
-        {data.length === 0 ? (
-
-          <p
-            className="
-              py-8
-              text-center
-              text-sm
-              text-text-secondary
-            "
-          >
-            Belum ada perangkat terdaftar.
+        {galatAksi && (
+          <p role="alert" className="flex gap-3 rounded-inner bg-danger-soft px-[18px] py-3.5 text-[15px] text-danger-text">
+            <AlertCircle size={20} className="flex-none" />
+            {galatAksi}
           </p>
-
-        ) : (
-
-          <div
-            className="
-              overflow-x-auto
-            "
-          >
-
-            <table
-              className="
-                w-full
-                text-sm
-              "
-            >
-
-              <thead
-                className="
-                  text-left
-                  text-xs
-                  uppercase
-                  text-text-secondary
-                "
-              >
-
-                <tr
-                  className="
-                    border-b
-                    border-border
-                  "
-                >
-
-                  <th
-                    className="
-                      py-3
-                      pr-3
-                    "
-                  >
-                    No.
-                  </th>
-
-
-                  <th
-                    className="
-                      py-3
-                      pr-3
-                    "
-                  >
-                    Pemakai Aktif
-                  </th>
-
-
-                  <th
-                    className="
-                      py-3
-                      pr-3
-                    "
-                  >
-                    ID Perangkat
-                  </th>
-
-
-                  <th
-                    className="
-                      py-3
-                      pr-3
-                    "
-                  >
-                    Status
-                  </th>
-
-
-                  <th
-                    className="
-                      py-3
-                      pr-3
-                    "
-                  >
-                    Aksi Langsung
-                  </th>
-
-                </tr>
-
-              </thead>
-
-
-              <tbody>
-
-                {data.map(
-                  (
-                    d,
-                    i
-                  ) => {
-
-                    const nama =
-                      namaPengguna(
-                        d.dipakai_oleh
-                      );
-
-
-                    return (
-
-                      <tr
-                        key={
-                          d.id_perangkat
-                        }
-
-                        className="
-                          border-b
-                          border-border
-                        "
-                      >
-
-                        {/* =============================
-                            NO
-                        ============================= */}
-
-                        <td
-                          className="
-                            py-3
-                            pr-3
-                            text-text-secondary
-                          "
-                        >
-                          {i + 1}.
-                        </td>
-
-
-                        {/* =============================
-                            USER
-                        ============================= */}
-
-                        <td
-                          className="
-                            py-3
-                            pr-3
-                          "
-                        >
-
-                          <div
-                            className="
-                              flex
-                              items-center
-                              gap-2
-                            "
-                          >
-
-                            {nama && (
-
-                              <span
-                                className="
-                                  flex
-                                  h-8
-                                  w-8
-                                  flex-shrink-0
-                                  items-center
-                                  justify-center
-                                  rounded-full
-                                  bg-primary-soft
-                                  text-xs
-                                  font-semibold
-                                  text-primary
-                                "
-                              >
-                                {inisial(
-                                  nama
-                                )}
-                              </span>
-
-                            )}
-
-
-                            <select
-                              value={
-                                d.dipakai_oleh
-                                ??
-                                ""
-                              }
-
-                              onChange={
-                                (e) =>
-                                  ubahPairing(
-                                    d.id_perangkat,
-                                    e.target.value
-                                  )
-                              }
-
-                              className="
-                                rounded-input
-                                border
-                                border-border
-                                px-2
-                                py-1
-                                text-sm
-                              "
-                            >
-
-                              <option
-                                value=""
-                              >
-                                — Tidak terpasang —
-                              </option>
-
-
-                              {pengguna
-                                .filter(
-                                  (u) => {
-
-                                    const sudahDipakaiDiLain =
-                                      data.some(
-                                        (p) =>
-                                          p.dipakai_oleh ===
-                                            u.id_tunanetra
-                                          &&
-                                          p.id_perangkat !==
-                                            d.id_perangkat
-                                      );
-
-
-                                    return (
-                                      !sudahDipakaiDiLain
-                                    );
-
-                                  }
-                                )
-
-                                .map(
-                                  (u) => (
-
-                                    <option
-                                      key={
-                                        u.id_tunanetra
-                                      }
-
-                                      value={
-                                        u.id_tunanetra
-                                      }
-                                    >
-                                      {u.nama_tunanetra}
-                                    </option>
-
-                                  )
-                                )}
-
-                            </select>
-
-                          </div>
-
-                        </td>
-
-
-                        {/* =============================
-                            DEVICE ID
-                        ============================= */}
-
-                        <td
-                          className="
-                            py-3
-                            pr-3
-                            font-mono
-                            text-text-primary
-                          "
-                        >
-                          {d.id_perangkat}
-                        </td>
-
-
-                        {/* =============================
-                            HEARTBEAT STATUS
-                        ============================= */}
-
-                        <td
-                          className="
-                            py-3
-                            pr-3
-                          "
-                        >
-
-                          <span
-                            className={`
-                              inline-flex
-                              items-center
-                              gap-1.5
-                              rounded-pill
-                              px-3
-                              py-1
-                              text-xs
-                              font-semibold
-
-                              ${
-                                d.status_online
-                                  ? "bg-success-soft text-success"
-                                  : "bg-offline/10 text-offline"
-                              }
-                            `}
-                          >
-
-                            {d.status_online
-                              ? (
-                                <Wifi
-                                  size={14}
-                                />
-                              )
-                              : (
-                                <WifiOff
-                                  size={14}
-                                />
-                              )
-                            }
-
-
-                            {d.status_online
-                              ? "Online"
-                              : "Offline"
-                            }
-
-                          </span>
-
-                        </td>
-
-
-                        {/* =============================
-                            ACTION
-                        ============================= */}
-
-                        <td
-                          className="
-                            py-3
-                            pr-3
-                          "
-                        >
-
-                          <div
-                            className="
-                              flex
-                              gap-3
-                            "
-                          >
-
-                            <button
-                              type="button"
-
-                              onClick={
-                                () =>
-                                  bukaGeofence(
-                                    d
-                                  )
-                              }
-
-                              title="Atur zona aman"
-
-                              className="
-                                text-text-secondary
-                                hover:text-primary
-                              "
-                            >
-                              <ShieldCheck
-                                size={16}
-                              />
-                            </button>
-
-
-                            <button
-                              type="button"
-
-                              onClick={
-                                () =>
-                                  setHapusTarget(
-                                    d
-                                  )
-                              }
-
-                              title="Hapus perangkat"
-
-                              className="
-                                text-text-secondary
-                                hover:text-danger
-                              "
-                            >
-                              <Trash2
-                                size={16}
-                              />
-                            </button>
-
-                          </div>
-
-                        </td>
-
-                      </tr>
-
-                    );
-
-                  }
-                )}
-
-              </tbody>
-
-            </table>
-
-          </div>
-
         )}
 
-      </div>
-
-
-      {/* =================================================
-          MODAL TAMBAH PERANGKAT
-      ================================================= */}
-
-      {modalTambah && (
-
-        <Modal
-          title="Tambah Perangkat"
-
-          onClose={
-            () =>
-              setModalTambah(
-                false
-              )
-          }
-        >
-
-          <form
-            onSubmit={
-              tambahPerangkat
-            }
-          >
-
-            {formError && (
-
-              <div
-                className="
-                  mb-3
-                  rounded-input
-                  bg-danger-soft
-                  px-3
-                  py-2
-                  text-sm
-                  text-danger
-                "
-              >
-                {formError}
+        {tab === "perangkat" ? (
+          <>
+            <section className="overflow-hidden rounded-card border-2 border-border bg-surface">
+              <div className="flex items-center justify-between gap-4 px-5 py-3.5">
+                <h2 className="text-[17px] font-extrabold leading-6">Perangkat terdaftar</h2>
+                <span className="text-sm text-text-secondary">{perangkat.length} perangkat</span>
               </div>
 
-            )}
+              {perangkat.length === 0 ? (
+                <p className="px-5 pb-5 text-sm leading-5 text-text-secondary">
+                  {isAdmin
+                    ? "Belum ada tongkat terdaftar. Tambahkan serial number tongkat agar lokasi dan baterainya terpantau."
+                    : "Belum ada tongkat terdaftar. Hubungi Administrator yayasan untuk mendaftarkan perangkat."}
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-secondary-soft text-left text-[13px] font-bold uppercase tracking-[0.06em] text-[#3F5B82]">
+                        <th scope="col" className="px-5 py-2.5">Perangkat</th>
+                        <th scope="col" className="px-5 py-2.5">Pemakai saat ini</th>
+                        <th scope="col" className="px-5 py-2.5">Status</th>
+                        <th scope="col" className="px-5 py-2.5">Terakhir terlihat</th>
+                        {isAdmin && <th scope="col" className="px-5 py-2.5 text-right">Aksi</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {perangkat.map((p, i) => (
+                        <tr key={p.id_perangkat} className="border-t border-[#EDF1F6]">
+                          <td className="px-5 py-2.5">
+                            <div className="flex items-center gap-3">
+                              <span
+                                className={`flex h-9 w-9 flex-none items-center justify-center rounded-pill text-xs font-extrabold ${
+                                  i % 2 === 0 ? "bg-tile-amber text-[#5C3D00]" : "bg-tile-blue text-primary"
+                                }`}
+                              >
+                                {p.id_perangkat.slice(-3)}
+                              </span>
+                              <b className="data text-[15px] font-bold">{p.id_perangkat}</b>
+                            </div>
+                          </td>
 
+                          <td className="px-5 py-2.5">
+                            <select
+                              value={p.dipakai_oleh ?? ""}
+                              onChange={(e) => pasangkan(p, e.target.value)}
+                              aria-label={`Pemakai ${p.id_perangkat}`}
+                              className="h-10 w-full max-w-[260px] rounded-field bg-field px-3 text-sm outline-none focus:bg-surface focus:shadow-[inset_0_0_0_2px_var(--color-ring)]"
+                            >
+                              <option value="">Tidak terpasang</option>
+                              {pengguna.map((u) => (
+                                <option key={u.id_tunanetra} value={u.id_tunanetra}>
+                                  {u.nama_tunanetra}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
 
-            <label
-              className="
-                mb-1
-                block
-                text-sm
-                font-medium
-                text-text-secondary
-              "
-            >
-              Serial Number / ID Perangkat
-            </label>
+                          <td className="px-5 py-2.5">
+                            <StatusPill
+                              status={p.status_online ? "online" : "offline"}
+                              label={p.status_online ? "Online" : "Offline"}
+                            />
+                          </td>
 
+                          <td className="px-5 py-2.5 text-sm">{waktuRelatif(p.last_active)}</td>
 
-            <input
-              required
-
-              value={
-                idBaru
-              }
-
-              onChange={
-                (e) =>
-                  setIdBaru(
-                    e.target.value
-                  )
-              }
-
-              placeholder="PNT-A03"
-
-              className="
-                mb-6
-                w-full
-                rounded-input
-                border
-                border-border
-                px-3
-                py-2
-                font-mono
-                text-sm
-              "
-            />
-
-
-            <button
-              type="submit"
-
-              className="
-                w-full
-                rounded-input
-                bg-primary
-                px-4
-                py-2
-                text-sm
-                font-medium
-                text-white
-                hover:bg-primary-hover
-              "
-            >
-              Tambah
-            </button>
-
-          </form>
-
-        </Modal>
-
-      )}
-
-
-      {/* =================================================
-          MODAL HAPUS PERANGKAT
-      ================================================= */}
-
-      {hapusTarget && (
-
-        <Modal
-          title="Hapus Perangkat"
-
-          onClose={
-            () =>
-              setHapusTarget(
-                null
-              )
-          }
-        >
-
-          <p
-            className="
-              mb-6
-              text-sm
-              text-text-secondary
-            "
-          >
-            Yakin ingin menghapus perangkat{" "}
-            <strong>
-              {hapusTarget.id_perangkat}
-            </strong>
-            ?
-          </p>
-
-
-          <div
-            className="
-              flex
-              gap-2
-            "
-          >
-
-            <button
-              type="button"
-
-              onClick={
-                () =>
-                  setHapusTarget(
-                    null
-                  )
-              }
-
-              className="
-                flex-1
-                rounded-input
-                border
-                border-border-strong
-                px-4
-                py-2
-                text-sm
-                hover:bg-surface-sunken
-              "
-            >
-              Batal
-            </button>
-
-
-            <button
-              type="button"
-
-              onClick={
-                konfirmasiHapus
-              }
-
-              className="
-                flex-1
-                rounded-input
-                bg-danger
-                px-4
-                py-2
-                text-sm
-                font-medium
-                text-white
-                hover:opacity-90
-              "
-            >
-              Hapus
-            </button>
-
-          </div>
-
-        </Modal>
-
-      )}
-
-
-      {/* =================================================
-          MODAL GEOFENCE
-      ================================================= */}
-
-      {geofenceTarget && (
-
-        <Modal
-          title={
-            `Zona Aman — ${geofenceTarget.id_perangkat}`
-          }
-
-          onClose={
-            () =>
-              setGeofenceTarget(
-                null
-              )
-          }
-        >
-
-          {geofenceLoading ? (
-
-            <p
-              className="
-                text-sm
-                text-text-secondary
-              "
-            >
-              Memuat...
-            </p>
-
-          ) : (
-
-            <form
-              onSubmit={
-                simpanGeofence
-              }
-            >
-
-              {geofenceError && (
-
-                <div
-                  className="
-                    mb-3
-                    rounded-input
-                    bg-danger-soft
-                    px-3
-                    py-2
-                    text-sm
-                    text-danger
-                  "
-                >
-                  {geofenceError}
+                          {isAdmin && (
+                            <td className="px-5 py-2.5">
+                              <div className="flex justify-end">
+                                <button
+                                  onClick={() => setHapus(p)}
+                                  aria-label={`Hapus ${p.id_perangkat}`}
+                                  className="flex h-9 w-9 items-center justify-center rounded-pill text-text-secondary hover:bg-danger-soft hover:text-danger-text"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+              )}
+            </section>
 
+            <p className="text-[13px] leading-5 text-text-secondary">
+              Administrator dan Pengawas sama-sama bisa memasangkan dan melepas pengguna. Menambah atau menghapus
+              perangkat hanya oleh Administrator.
+            </p>
+          </>
+        ) : (
+          <div className="flex flex-col gap-5 lg:flex-row">
+            <div className="h-[420px] min-w-0 flex-1 overflow-hidden rounded-card border-2 border-border">
+              <PetaZona center={pusat} radius={radius} onPick={(lat, lng) => setPusat({ lat, lng })} />
+            </div>
+
+            <aside className="flex w-full flex-none flex-col gap-4 rounded-card border-2 border-border bg-surface p-5 lg:w-[340px]">
+              <div>
+                <h2 className="text-[17px] font-extrabold leading-6">Zona yayasan</h2>
+                <p className="mt-1 text-sm leading-5 text-text-secondary">
+                  Berlaku untuk semua perangkat yayasan. Perangkat di luar lingkaran ini memicu notifikasi.
+                </p>
+              </div>
+
+              <div>
+                <div className="mb-1.5 text-sm font-bold">Titik pusat</div>
+                <div className="data flex h-11 items-center rounded-field bg-field px-4 text-[13px]">
+                  {pusat.lat.toFixed(6)}, {pusat.lng.toFixed(6)}
+                </div>
+                <p className="mt-1.5 text-sm text-text-secondary">Ketuk peta untuk memindahkan titik pusat.</p>
+              </div>
+
+              <Field
+                label="Radius (meter)"
+                type="number"
+                min={RADIUS_MIN}
+                max={20000}
+                value={radius}
+                onChange={(e) => setRadius(Number(e.target.value))}
+                hint={`Minimal ${RADIUS_MIN} meter.`}
+                disabled={!isAdmin}
+              />
+
+              {pesanZona && (
+                <p role="status" className="rounded-inner bg-success-soft px-4 py-3 text-sm text-success-text">
+                  {pesanZona}
+                </p>
               )}
 
+              {!isAdmin ? (
+                <p className="mt-auto text-sm leading-5 text-text-secondary">
+                  Hanya Administrator yang dapat mengubah zona aman.
+                </p>
+              ) : (
+                <Button onClick={simpanZona} disabled={sibuk || radius < RADIUS_MIN} className="mt-auto w-full">
+                  {sibuk ? "Menyimpan…" : zonaYayasan ? "Simpan perubahan" : "Simpan zona"}
+                </Button>
+              )}
+            </aside>
+          </div>
+        )}
+      </div>
 
-              <p
-                className="
-                  mb-3
-                  text-xs
-                  text-text-secondary
-                "
-              >
-                Klik di peta untuk menentukan titik pusat zona aman.
-              </p>
-
-
-              <div
-                className="
-                  mb-4
-                  h-56
-                  overflow-hidden
-                  rounded-map
-                "
-              >
-
-                <GeofenceMapPicker
-                  center={
-                    titikPusat
-                  }
-
-                  radius={
-                    radius
-                  }
-
-                  onPick={
-                    (
-                      lat,
-                      lng
-                    ) =>
-                      setTitikPusat({
-                        lat,
-                        lng,
-                      })
-                  }
-                />
-
-              </div>
-
-
-              {/* =========================================
-                  NAMA AREA
-              ========================================= */}
-
-              <label
-                className="
-                  mb-1
-                  block
-                  text-sm
-                  font-medium
-                  text-text-secondary
-                "
-              >
-                Nama Area
-              </label>
-
-
-              <input
-                required
-
-                value={
-                  namaArea
-                }
-
-                onChange={
-                  (e) =>
-                    setNamaArea(
-                      e.target.value
-                    )
-                }
-
-                placeholder="Rumah, Panti, Sekolah"
-
-                className="
-                  mb-4
-                  w-full
-                  rounded-input
-                  border
-                  border-border
-                  px-3
-                  py-2
-                  text-sm
-                "
-              />
-
-
-              {/* =========================================
-                  RADIUS
-              ========================================= */}
-
-              <label
-                className="
-                  mb-1
-                  block
-                  text-sm
-                  font-medium
-                  text-text-secondary
-                "
-              >
-                Radius (meter)
-              </label>
-
-
-              <input
-                type="number"
-
-                min={
-                  10
-                }
-
-                required
-
-                value={
-                  radius
-                }
-
-                onChange={
-                  (e) =>
-                    setRadius(
-                      Number(
-                        e.target.value
-                      )
-                    )
-                }
-
-                className="
-                  mb-6
-                  w-full
-                  rounded-input
-                  border
-                  border-border
-                  px-3
-                  py-2
-                  text-sm
-                "
-              />
-
-
-              {/* =========================================
-                  ACTIONS
-              ========================================= */}
-
-              <div
-                className="
-                  flex
-                  gap-2
-                "
-              >
-
-                <button
-                  type="submit"
-
-                  className="
-                    flex-1
-                    rounded-input
-                    bg-primary
-                    px-4
-                    py-2
-                    text-sm
-                    font-medium
-                    text-white
-                    hover:bg-primary-hover
-                  "
-                >
-                  Simpan Zona Aman
-                </button>
-
-
-                {geofenceAda && (
-
-                  <button
-                    type="button"
-
-                    onClick={
-                      hapusGeofence
-                    }
-
-                    className="
-                      rounded-input
-                      border
-                      border-danger
-                      px-4
-                      py-2
-                      text-sm
-                      font-medium
-                      text-danger
-                      hover:bg-danger-soft
-                    "
-                  >
-                    Hapus
-                  </button>
-
-                )}
-
-              </div>
-
-            </form>
-
-          )}
-
+      {tambah && (
+        <Modal
+          judul="Tambah perangkat"
+          keterangan="Serial number tertera pada badan tongkat dan harus sama dengan yang dikirim perangkat."
+          onTutup={() => {
+            setTambah(false);
+            setGalatAksi("");
+          }}
+        >
+          <form onSubmit={tambahPerangkat} className="flex flex-col gap-4">
+            <Field
+              label="Serial number"
+              required
+              autoFocus
+              placeholder="PNT-A01"
+              value={serial}
+              onChange={(e) => setSerial(e.target.value)}
+            />
+            <div className="mt-1 flex gap-3">
+              <Button type="submit" disabled={sibuk} className="flex-1">
+                {sibuk ? "Menyimpan…" : "Tambah"}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setTambah(false)}>
+                Batal
+              </Button>
+            </div>
+          </form>
         </Modal>
-
       )}
 
-    </div>
-
+      {hapus && (
+        <Modal judul="Hapus perangkat" onTutup={() => setHapus(null)}>
+          <div className="flex flex-col gap-4">
+            <p className="text-[15px] leading-6">
+              Hapus <b className="data">{hapus.id_perangkat}</b> dari inventaris? Riwayat perjalanannya ikut terhapus,
+              tetapi riwayat insiden tetap tersimpan.
+            </p>
+            <div className="flex gap-3">
+              <Button variant="danger" onClick={konfirmasiHapus} disabled={sibuk} className="flex-1">
+                {sibuk ? "Menghapus…" : "Hapus"}
+              </Button>
+              <Button variant="ghost" onClick={() => setHapus(null)}>
+                Batal
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
