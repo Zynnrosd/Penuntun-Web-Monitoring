@@ -1,4 +1,5 @@
 // backend/src/mqtt/listener.ts
+// PENUNTUN: heartbeat, GPS telemetry, AI detection, tombol SOS.
 
 import mqtt, { MqttClient } from "mqtt";
 
@@ -7,10 +8,15 @@ import { isDiLuarZonaAman } from "../services/geofencing.service";
 import { buatNotifikasiDarurat } from "../services/notifikasi.service";
 import { env } from "../config/env";
 
+// =========================================================
+// TYPES
+// =========================================================
+
 interface TelemetryPayload {
   id_perangkat: string;
   latitude: number;
   longitude: number;
+  // GPS NEO-6M tidak mengukur persentase baterai.
   baterai?: number | null;
   timestamp?: string;
 }
@@ -24,21 +30,46 @@ interface DetectionPayload {
   timestamp?: string;
 }
 
+interface SosPayload {
+  id_perangkat: string;
+  // Lokasi bisa kosong bila GPS belum mendapat fix saat tombol ditekan.
+  latitude?: number | null;
+  longitude?: number | null;
+  // Waktu tombol ditekan. Penting bila perangkat sempat offline (C200 Tabel 2.4).
+  timestamp?: string;
+}
+
 interface HeartbeatPayload {
   id_perangkat: string;
   status: "online";
   timestamp?: string;
 }
 
+// =========================================================
+// MQTT TOPICS
+// =========================================================
+
 const TOPIC_TELEMETRY = "penuntun/telemetry/#";
 const TOPIC_DETECTION = "penuntun/detection/#";
 const TOPIC_STATUS = "penuntun/status/#";
+// USULAN, belum disepakati dengan tim perangkat.
+const TOPIC_SOS = "penuntun/sos/#";
 
+// Titik riwayat disimpan paling cepat sekali setiap 5 menit per perangkat.
+// Lokasi terakhir di tabel perangkat tetap diperbarui setiap pesan GPS (~10 detik).
 const TRACKING_INTERVAL_MS = 5 * 60 * 1000;
+
+// Hindari dua pesan GPS bersamaan menciptakan dua baris riwayat.
 const trackingSedangDiproses = new Set<string>();
 
+// Hindari notifikasi geofence setiap 10 detik saat GPS berada
+// di luar zona aman. Berlaku per perangkat selama backend hidup.
 const GEOFENCE_COOLDOWN_MS = 5 * 60 * 1000;
 const geofenceAlertTerakhir = new Map<string, number>();
+
+// =========================================================
+// VALIDASI PAYLOAD
+// =========================================================
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -61,11 +92,15 @@ function isValidTelemetry(data: unknown): data is TelemetryPayload {
     Number.isFinite(data.longitude) &&
     data.longitude >= -180 &&
     data.longitude <= 180 &&
-    (data.baterai == null ||
-      (typeof data.baterai === "number" &&
+    (
+      data.baterai == null ||
+      (
+        typeof data.baterai === "number" &&
         Number.isFinite(data.baterai) &&
         data.baterai >= 0 &&
-        data.baterai <= 100)) &&
+        data.baterai <= 100
+      )
+    ) &&
     (data.timestamp === undefined || typeof data.timestamp === "string")
   );
 }
@@ -82,8 +117,10 @@ function isValidDetection(data: unknown): data is DetectionPayload {
     data.confidence >= 0 &&
     data.confidence <= 1 &&
     (data.inference_ms === undefined ||
-      (typeof data.inference_ms === "number" && Number.isFinite(data.inference_ms))) &&
-    (data.ai_fps === undefined || (typeof data.ai_fps === "number" && Number.isFinite(data.ai_fps))) &&
+      (typeof data.inference_ms === "number" &&
+        Number.isFinite(data.inference_ms))) &&
+    (data.ai_fps === undefined ||
+      (typeof data.ai_fps === "number" && Number.isFinite(data.ai_fps))) &&
     (data.timestamp === undefined || typeof data.timestamp === "string")
   );
 }
@@ -97,10 +134,28 @@ function isValidHeartbeat(data: unknown): data is HeartbeatPayload {
   );
 }
 
+function isValidSos(data: unknown): data is SosPayload {
+  if (!isObject(data) || !validId(data.id_perangkat)) return false;
+
+  const koordinatValid = (nilai: unknown, batas: number) =>
+    nilai == null || (typeof nilai === "number" && Number.isFinite(nilai) && Math.abs(nilai) <= batas);
+
+  return (
+    koordinatValid(data.latitude, 90) &&
+    koordinatValid(data.longitude, 180) &&
+    (data.timestamp === undefined || typeof data.timestamp === "string")
+  );
+}
+
+// Jangan proses payload jika ID pada topic berbeda dengan ID payload.
 function topicMatchesDevice(topic: string, idPerangkat: string): boolean {
   const idTopic = topic.split("/")[2];
   return Boolean(idTopic) && idTopic === idPerangkat;
 }
+
+// =========================================================
+// PROSES HEARTBEAT
+// =========================================================
 
 async function prosesHeartbeat(data: HeartbeatPayload): Promise<void> {
   const { id_perangkat } = data;
@@ -128,21 +183,30 @@ async function prosesHeartbeat(data: HeartbeatPayload): Promise<void> {
   console.log(`[HEARTBEAT] ${id_perangkat} → ONLINE`);
 }
 
+// =========================================================
+// PROSES TELEMETRY GPS
+// =========================================================
+
 async function prosesTelemetry(data: TelemetryPayload): Promise<void> {
   const { id_perangkat, latitude, longitude, baterai } = data;
   const adaBaterai = typeof baterai === "number";
 
-  console.log(
-    `[TELEMETRY] ${id_perangkat} ${latitude}, ${longitude} · baterai ${adaBaterai ? `${baterai}%` : "belum tersedia"}`
-  );
+  console.log("\n========================================");
+  console.log("[MQTT TELEMETRY]");
+  console.log(`Perangkat : ${id_perangkat}`);
+  console.log(`Latitude  : ${latitude}`);
+  console.log(`Longitude : ${longitude}`);
+  console.log(`Baterai   : ${adaBaterai ? `${baterai}%` : "Belum tersedia"}`);
+  console.log("========================================");
 
-  // GPS NEO-6M tidak mengukur baterai. Jangan timpa nilai lama dengan null.
+  // Perbarui lokasi dan status. Jangan timpa baterai lama
+  // ketika GPS tidak mengirim persentase baterai.
   const updatePerangkat = {
     lat_terakhir: latitude,
     long_terakhir: longitude,
     status_online: true,
     last_active: new Date().toISOString(),
-    ...(adaBaterai ? { baterai_terakhir: baterai } : {}),
+    ...(typeof baterai === "number" ? { baterai_terakhir: baterai } : {}),
   };
 
   const { data: perangkat, error: perangkatError } = await supabase
@@ -153,94 +217,121 @@ async function prosesTelemetry(data: TelemetryPayload): Promise<void> {
     .maybeSingle();
 
   if (perangkatError) {
-    console.error("[TELEMETRY] Gagal update perangkat:", perangkatError.message);
+    console.error("[MQTT] Gagal update perangkat:", perangkatError.message);
     return;
   }
 
   if (!perangkat) {
-    console.warn(`[TELEMETRY] Perangkat ${id_perangkat} belum terdaftar di database.`);
+    console.warn(`[MQTT] Perangkat ${id_perangkat} belum terdaftar di database.`);
     return;
   }
 
-  await simpanRiwayat(perangkat.id_yayasan, data);
-  await periksaZonaAman(perangkat.id_yayasan, data);
-}
+  console.log(`[MQTT] Lokasi ${id_perangkat} berhasil diperbarui.`);
 
-// Lokasi terakhir diperbarui tiap pesan, tetapi titik riwayat paling cepat
-// sekali per 5 menit. Ambang dibaca dari database agar tetap benar setelah restart.
-async function simpanRiwayat(idYayasan: string, data: TelemetryPayload): Promise<void> {
-  const { id_perangkat, latitude, longitude, baterai } = data;
+  // =====================================================
+  // SIMPAN RIWAYAT PERJALANAN MAKSIMAL 1X PER 5 MENIT
+  // =====================================================
+  // Cek recorded_at terakhir di Supabase agar interval
+  // tetap benar bahkan setelah backend di-restart.
+  // GPS terbaru selalu di-update ke tabel "perangkat" di atas.
 
-  if (trackingSedangDiproses.has(id_perangkat)) return;
-  trackingSedangDiproses.add(id_perangkat);
+  if (!trackingSedangDiproses.has(id_perangkat)) {
+    trackingSedangDiproses.add(id_perangkat);
 
-  try {
-    const { data: terakhir, error } = await supabase
-      .from("tracking_data")
-      .select("recorded_at")
-      .eq("id_perangkat", id_perangkat)
-      .order("recorded_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    try {
+      const { data: trackingTerakhir, error: cekTrackingError } =
+        await supabase
+          .from("tracking_data")
+          .select("recorded_at")
+          .eq("id_perangkat", id_perangkat)
+          .order("recorded_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-    if (error) {
-      console.error(`[RIWAYAT] Gagal mengecek riwayat ${id_perangkat}:`, error.message);
-      return;
+      if (cekTrackingError) {
+        console.error(
+          `[GPS] Gagal mengecek riwayat ${id_perangkat}:`,
+          cekTrackingError.message
+        );
+      } else {
+        const sekarang = Date.now();
+        const waktuTerakhir = trackingTerakhir
+          ? Date.parse(trackingTerakhir.recorded_at)
+          : null;
+
+        if (waktuTerakhir !== null && !Number.isFinite(waktuTerakhir)) {
+          console.error(
+            `[GPS] recorded_at terakhir tidak valid untuk ${id_perangkat}. ` +
+            "Penyimpanan dilewati agar tidak membuat data ganda."
+          );
+        } else if (
+          waktuTerakhir === null ||
+          sekarang - waktuTerakhir >= TRACKING_INTERVAL_MS
+        ) {
+          // GPS NEO-6M tidak menyertakan baterai. Jika tidak
+          // ada nilainya, jangan mengirim angka baterai palsu.
+          const dataTracking = {
+            id_perangkat,
+            id_yayasan: perangkat.id_yayasan,
+            latitude,
+            longitude,
+            ...(typeof baterai === "number" ? { baterai } : {}),
+          };
+
+          const { error: trackingError } = await supabase
+            .from("tracking_data")
+            .insert(dataTracking);
+
+          if (trackingError) {
+            console.error(
+              `[GPS] Gagal menyimpan riwayat ${id_perangkat}:`,
+              trackingError.message
+            );
+          } else {
+            console.log(
+              `[GPS] Riwayat perjalanan ${id_perangkat} disimpan (interval 5 menit).`
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        `[GPS] Error memproses riwayat ${id_perangkat}:`,
+        error
+      );
+    } finally {
+      trackingSedangDiproses.delete(id_perangkat);
     }
-
-    const waktuTerakhir = terakhir ? Date.parse(terakhir.recorded_at) : null;
-
-    if (waktuTerakhir !== null && !Number.isFinite(waktuTerakhir)) {
-      console.error(`[RIWAYAT] recorded_at ${id_perangkat} tidak valid. Penyimpanan dilewati.`);
-      return;
-    }
-    if (waktuTerakhir !== null && Date.now() - waktuTerakhir < TRACKING_INTERVAL_MS) return;
-
-    const { error: galatSimpan } = await supabase.from("tracking_data").insert({
-      id_perangkat,
-      id_yayasan: idYayasan,
-      latitude,
-      longitude,
-      ...(typeof baterai === "number" ? { baterai } : {}),
-    });
-
-    if (galatSimpan) {
-      console.error(`[RIWAYAT] Gagal menyimpan ${id_perangkat}:`, galatSimpan.message);
-      return;
-    }
-
-    console.log(`[RIWAYAT] Titik perjalanan ${id_perangkat} disimpan.`);
-  } catch (error) {
-    console.error(`[RIWAYAT] Error memproses ${id_perangkat}:`, error);
-  } finally {
-    trackingSedangDiproses.delete(id_perangkat);
   }
-}
 
-async function periksaZonaAman(idYayasan: string, data: TelemetryPayload): Promise<void> {
-  const { id_perangkat, latitude, longitude } = data;
-
-  // Zona khusus perangkat menang atas zona bawaan yayasan (id_perangkat null).
-  const { data: zona, error } = await supabase
+  // Zona perangkat menang atas zona bawaan yayasan (id_perangkat null).
+  const { data: zona, error: geofenceError } = await supabase
     .from("geofence")
     .select("id_perangkat, nama_area, center_lat, center_long, radius_meter")
-    .eq("id_yayasan", idYayasan)
+    .eq("id_yayasan", perangkat.id_yayasan)
     .eq("is_active", true)
     .or(`id_perangkat.eq.${id_perangkat},id_perangkat.is.null`);
 
-  if (error) {
-    console.error("[GEOFENCE] Gagal mengambil zona aman:", error.message);
+  if (geofenceError) {
+    console.error("[GEOFENCE] Gagal mengambil zona aman:", geofenceError.message);
     return;
   }
 
   const geofence = zona?.find((z) => z.id_perangkat === id_perangkat) ?? zona?.[0];
   if (!geofence) return;
-  if (!isDiLuarZonaAman(latitude, longitude, geofence)) return;
+
+  if (!isDiLuarZonaAman(latitude, longitude, geofence)) {
+    return;
+  }
 
   const sekarang = Date.now();
-  if (sekarang - (geofenceAlertTerakhir.get(id_perangkat) ?? 0) < GEOFENCE_COOLDOWN_MS) return;
+  const terakhir = geofenceAlertTerakhir.get(id_perangkat) ?? 0;
 
-  // Ditandai sebelum operasi async agar pesan beruntun tidak membuat notifikasi ganda.
+  if (sekarang - terakhir < GEOFENCE_COOLDOWN_MS) {
+    return;
+  }
+
+  // Tandai sebelum operasi async untuk menghindari notifikasi ganda.
   geofenceAlertTerakhir.set(id_perangkat, sekarang);
 
   try {
@@ -253,22 +344,121 @@ async function periksaZonaAman(idYayasan: string, data: TelemetryPayload): Promi
       latitude_sos: latitude,
       longitude_sos: longitude,
     });
-  } catch (galat) {
+  } catch (error) {
     geofenceAlertTerakhir.delete(id_perangkat);
-    console.error("[GEOFENCE] Gagal membuat notifikasi:", galat);
+    console.error("[GEOFENCE] Gagal membuat notifikasi:", error);
   }
 }
 
+// =========================================================
+// PROSES TOMBOL SOS
+// =========================================================
+
+const sosSedangDiproses = new Set<string>();
+
+// Waktu dari perangkat hanya dipakai bila masuk akal: bisa dibaca dan tidak di masa depan.
+// Toleransi 1 menit untuk selisih jam perangkat.
+function waktuKejadianValid(timestamp?: string): string | undefined {
+  if (!timestamp) return undefined;
+  const ms = Date.parse(timestamp);
+  if (!Number.isFinite(ms) || ms > Date.now() + 60_000) return undefined;
+  return new Date(ms).toISOString();
+}
+
+async function prosesSos(data: SosPayload): Promise<void> {
+  const { id_perangkat, latitude, longitude, timestamp } = data;
+
+  // Satu SOS per perangkat diproses dalam satu waktu (pesan MQTT ganda).
+  if (sosSedangDiproses.has(id_perangkat)) return;
+  sosSedangDiproses.add(id_perangkat);
+
+  try {
+    console.log(`[SOS] Tombol SOS dari ${id_perangkat}`);
+
+    // Selama insiden SOS perangkat ini belum selesai, tekanan berikutnya tidak membuat insiden baru.
+    const { data: berjalan, error: galatCek } = await supabase
+      .from("notifikasi")
+      .select("id_notifikasi")
+      .eq("id_perangkat", id_perangkat)
+      .eq("tipe_event", "SOS")
+      .in("status", ["AKTIF", "DITANGANI"])
+      .limit(1)
+      .maybeSingle();
+
+    if (galatCek) {
+      console.error(`[SOS] Gagal memeriksa insiden berjalan ${id_perangkat}:`, galatCek.message);
+      return;
+    }
+    if (berjalan) {
+      console.log(`[SOS] ${id_perangkat} sudah punya insiden SOS berjalan. Diabaikan.`);
+      return;
+    }
+
+    // Lokasi dari payload; bila kosong pakai lokasi GPS terakhir di tabel perangkat.
+    const { data: perangkat, error: galatPerangkat } = await supabase
+      .from("perangkat")
+      .select("lat_terakhir, long_terakhir")
+      .eq("id_perangkat", id_perangkat)
+      .maybeSingle();
+
+    if (galatPerangkat) {
+      console.error(`[SOS] Gagal membaca perangkat ${id_perangkat}:`, galatPerangkat.message);
+      return;
+    }
+    if (!perangkat) {
+      console.warn(`[SOS] Perangkat ${id_perangkat} tidak terdaftar di database.`);
+      return;
+    }
+
+    await buatNotifikasiDarurat({
+      id_perangkat,
+      tipe_event: "SOS",
+      deskripsi: "Tombol SOS ditekan",
+      latitude_sos: latitude ?? perangkat.lat_terakhir,
+      longitude_sos: longitude ?? perangkat.long_terakhir,
+      waktu_kejadian: waktuKejadianValid(timestamp),
+    });
+
+    // Ditandai setelah insiden berhasil dibuat, supaya tidak ada status SOS tanpa insiden.
+    const { error: galatStatus } = await supabase
+      .from("perangkat")
+      .update({ status_sos: true, status_online: true, last_active: new Date().toISOString() })
+      .eq("id_perangkat", id_perangkat);
+
+    if (galatStatus) {
+      console.error(`[SOS] Gagal menandai status_sos ${id_perangkat}:`, galatStatus.message);
+    }
+  } catch (error) {
+    console.error(`[SOS] Gagal membuat insiden ${id_perangkat}:`, error);
+  } finally {
+    sosSedangDiproses.delete(id_perangkat);
+  }
+}
+
+// =========================================================
+// PROSES AI DETECTION
+// =========================================================
+
 async function prosesDetection(data: DetectionPayload): Promise<void> {
-  const { id_perangkat, class_name, confidence, inference_ms, ai_fps } = data;
+  const { id_perangkat, class_name, confidence, inference_ms, ai_fps, timestamp } = data;
 
-  console.log(
-    `[DETEKSI] ${id_perangkat} ${class_name} ${(confidence * 100).toFixed(1)}%` +
-      (typeof inference_ms === "number" ? ` · ${inference_ms.toFixed(1)} ms` : "") +
-      (typeof ai_fps === "number" ? ` · ${ai_fps.toFixed(2)} fps` : "")
-  );
+  console.log("\n========================================");
+  console.log("[MQTT AI DETECTION]");
+  console.log(`Perangkat  : ${id_perangkat}`);
+  console.log(`Class      : ${class_name}`);
+  console.log(`Confidence : ${(confidence * 100).toFixed(1)}%`);
 
-  // Deteksi juga membuktikan perangkat hidup, cadangan bila heartbeat terlambat.
+  if (typeof inference_ms === "number") {
+    console.log(`Inference  : ${inference_ms.toFixed(1)} ms`);
+  }
+  if (typeof ai_fps === "number") {
+    console.log(`AI FPS     : ${ai_fps.toFixed(2)}`);
+  }
+  if (timestamp) {
+    console.log(`Timestamp  : ${timestamp}`);
+  }
+  console.log("========================================");
+
   const { error } = await supabase
     .from("perangkat")
     .update({
@@ -278,9 +468,13 @@ async function prosesDetection(data: DetectionPayload): Promise<void> {
     .eq("id_perangkat", id_perangkat);
 
   if (error) {
-    console.error("[DETEKSI] Gagal update perangkat:", error.message);
+    console.error("[MQTT DETECTION] Gagal update perangkat:", error.message);
   }
 }
+
+// =========================================================
+// MQTT LISTENER
+// =========================================================
 
 export function mulaiMqttListener(): MqttClient | undefined {
   if (!env.MQTT_BROKER_URL) {
@@ -288,11 +482,17 @@ export function mulaiMqttListener(): MqttClient | undefined {
     return;
   }
 
-  console.log(`[MQTT] Menyambung ke broker: ${env.MQTT_BROKER_URL}`);
+  const username = process.env.MQTT_USERNAME;
+  const password = process.env.MQTT_PASSWORD;
+
+  console.log("\n========================================");
+  console.log("       PENUNTUN MQTT CLIENT");
+  console.log("========================================");
+  console.log(`[MQTT] Broker: ${env.MQTT_BROKER_URL}`);
 
   const client = mqtt.connect(env.MQTT_BROKER_URL, {
-    username: process.env.MQTT_USERNAME,
-    password: process.env.MQTT_PASSWORD,
+    username,
+    password,
     reconnectPeriod: 3000,
     connectTimeout: 10000,
     clean: true,
@@ -302,13 +502,23 @@ export function mulaiMqttListener(): MqttClient | undefined {
   client.on("connect", () => {
     console.log("[MQTT] Terhubung ke broker.");
 
-    client.subscribe([TOPIC_STATUS, TOPIC_TELEMETRY, TOPIC_DETECTION], { qos: 0 }, (error) => {
-      if (error) {
-        console.error("[MQTT] Gagal subscribe:", error.message);
-        return;
+    client.subscribe(
+      [TOPIC_STATUS, TOPIC_TELEMETRY, TOPIC_DETECTION, TOPIC_SOS],
+      { qos: 0 },
+      (error) => {
+        if (error) {
+          console.error("[MQTT] Gagal subscribe:", error.message);
+          return;
+        }
+
+        console.log("[MQTT] Subscribe berhasil:");
+        console.log(`       ${TOPIC_STATUS}`);
+        console.log(`       ${TOPIC_TELEMETRY}`);
+        console.log(`       ${TOPIC_DETECTION}`);
+        console.log(`       ${TOPIC_SOS}`);
+        console.log("========================================\n");
       }
-      console.log(`[MQTT] Subscribe: ${TOPIC_STATUS}, ${TOPIC_TELEMETRY}, ${TOPIC_DETECTION}`);
-    });
+    );
   });
 
   client.on("message", async (topic, payload) => {
@@ -342,11 +552,11 @@ export function mulaiMqttListener(): MqttClient | undefined {
 
       if (topic.startsWith("penuntun/telemetry/")) {
         if (!isValidTelemetry(data)) {
-          console.error("[TELEMETRY] Payload tidak valid:", data);
+          console.error("[MQTT TELEMETRY] Payload tidak valid:", data);
           return;
         }
         if (!topicMatchesDevice(topic, data.id_perangkat)) {
-          console.warn(`[TELEMETRY] ID topic dan payload berbeda: ${topic}`);
+          console.warn(`[MQTT TELEMETRY] ID topic dan payload berbeda: ${topic}`);
           return;
         }
         await prosesTelemetry(data);
@@ -355,14 +565,27 @@ export function mulaiMqttListener(): MqttClient | undefined {
 
       if (topic.startsWith("penuntun/detection/")) {
         if (!isValidDetection(data)) {
-          console.error("[DETEKSI] Payload tidak valid:", data);
+          console.error("[MQTT DETECTION] Payload tidak valid:", data);
           return;
         }
         if (!topicMatchesDevice(topic, data.id_perangkat)) {
-          console.warn(`[DETEKSI] ID topic dan payload berbeda: ${topic}`);
+          console.warn(`[MQTT DETECTION] ID topic dan payload berbeda: ${topic}`);
           return;
         }
         await prosesDetection(data);
+        return;
+      }
+
+      if (topic.startsWith("penuntun/sos/")) {
+        if (!isValidSos(data)) {
+          console.error("[SOS] Payload tidak valid:", data);
+          return;
+        }
+        if (!topicMatchesDevice(topic, data.id_perangkat)) {
+          console.warn(`[SOS] ID topic dan payload berbeda: ${topic}`);
+          return;
+        }
+        await prosesSos(data);
         return;
       }
 
@@ -372,10 +595,21 @@ export function mulaiMqttListener(): MqttClient | undefined {
     }
   });
 
-  client.on("error", (error) => console.error("[MQTT] Connection error:", error.message));
-  client.on("reconnect", () => console.log("[MQTT] Mencoba reconnect..."));
-  client.on("offline", () => console.log("[MQTT] Broker offline / tidak dapat dijangkau."));
-  client.on("close", () => console.log("[MQTT] Koneksi broker terputus."));
+  client.on("error", (error) => {
+    console.error("[MQTT] Connection error:", error.message);
+  });
+
+  client.on("reconnect", () => {
+    console.log("[MQTT] Mencoba reconnect...");
+  });
+
+  client.on("offline", () => {
+    console.log("[MQTT] Broker offline / tidak dapat dijangkau.");
+  });
+
+  client.on("close", () => {
+    console.log("[MQTT] Koneksi broker terputus.");
+  });
 
   return client;
 }

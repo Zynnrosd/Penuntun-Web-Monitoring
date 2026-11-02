@@ -41,14 +41,12 @@ export type Notifikasi = {
   status: "AKTIF" | "DITANGANI" | "SELESAI";
   ditangani_oleh: string | null;
   ditangani_pada: string | null;
-  prioritas: string | null;
   deskripsi: string | null;
   latitude_sos: number | null;
   longitude_sos: number | null;
   lokasi_sos: string | null;
   occurred_at: string;
   notifikasi_delivery?: NotifikasiDelivery[];
-  penangan?: { nama_staf: string } | null;
 };
 
 export type Geofence = {

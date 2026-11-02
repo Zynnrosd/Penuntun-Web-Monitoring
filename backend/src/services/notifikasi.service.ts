@@ -1,7 +1,7 @@
 // backend/src/services/notifikasi.service.ts
 
 import { supabase } from "../lib/supabase";
-import { kirimNotifikasiWhatsApp } from "./whatsapp.service";
+import { kirimNotifikasiWhatsApp, susunPesanInsiden } from "./whatsapp.service";
 
 type Kejadian = {
   id_perangkat: string;
@@ -9,6 +9,8 @@ type Kejadian = {
   deskripsi: string;
   latitude_sos?: number | null;
   longitude_sos?: number | null;
+  // Waktu kejadian dari perangkat (ISO). Bila kosong, database memakai waktu sekarang.
+  waktu_kejadian?: string;
 };
 
 export async function buatNotifikasiDarurat(params: Kejadian) {
@@ -33,13 +35,18 @@ export async function buatNotifikasiDarurat(params: Kejadian) {
       deskripsi: params.deskripsi,
       latitude_sos: params.latitude_sos ?? null,
       longitude_sos: params.longitude_sos ?? null,
+      ...(params.waktu_kejadian ? { occurred_at: params.waktu_kejadian } : {}),
     })
     .select("id_notifikasi, id_yayasan, kode_insiden, tipe_event, status, occurred_at")
     .single();
 
   if (error || !notif) throw new Error(`Gagal membuat notifikasi: ${error?.message ?? "tidak diketahui"}`);
 
-  await antreanWhatsApp(notif.id_notifikasi, notif.id_yayasan, params.deskripsi);
+  await antreanWhatsApp(
+    notif.id_notifikasi,
+    notif.id_yayasan,
+    susunPesanInsiden(params, notif.kode_insiden, pengguna?.nama_tunanetra)
+  );
 
   return notif;
 }

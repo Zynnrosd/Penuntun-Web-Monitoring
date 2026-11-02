@@ -11,6 +11,7 @@ import penggunaRoutes from "./routes/pengguna.routes";
 import notifikasiRoutes from "./routes/notifikasi.routes";
 import pengaturanRoutes from "./routes/pengaturan.routes";
 import geofenceRoutes from "./routes/geofence.routes";
+import pengawasRoutes from "./routes/pengawas.routes";
 
 import { startDeviceStatusMonitor } from "./services/device-status.service";
 import { mulaiMqttListener } from "./mqtt/listener";
@@ -30,6 +31,7 @@ app.use("/pengguna", penggunaRoutes);
 app.use("/notifikasi", notifikasiRoutes);
 app.use("/pengaturan", pengaturanRoutes);
 app.use("/geofence", geofenceRoutes);
+app.use("/pengawas", pengawasRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Endpoint tidak ditemukan" });

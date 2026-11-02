@@ -1,729 +1,351 @@
-"use client";
+// frontend/src/app/(dashboard)/monitoring/page.tsx
 
+"use client";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
-
-import {
-  Search,
-  Wifi,
-  WifiOff,
-  BatteryMedium,
-  MapPin,
-  Navigation,
-} from "lucide-react";
-
-import { PageHeader } from "@/components/layout/PageHeader";
-import { Badge } from "@/components/ui/Badge";
-
+import { BatteryMedium, Clock, MapPin, Navigation, Search, WifiOff } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useRealtimeTable } from "@/hooks/useRealtimeTable";
+import { inisialNama } from "@/hooks/useSession";
+import { koordinat, waktuRelatif } from "@/lib/format";
+import type { Perangkat } from "@/types";
 
-import type {
-  Perangkat,
-  PenggunaTunanetra,
-} from "@/types";
+const MapView = dynamic(() => import("@/components/map/MapView").then((m) => m.MapView), { ssr: false });
 
+type Saringan = "SEMUA" | "ONLINE" | "OFFLINE";
 
-const MapView = dynamic(
-  () =>
-    import("@/components/map/MapView").then(
-      (m) => m.MapView
-    ),
-  {
-    ssr: false,
-  }
-);
+const LABEL_SARINGAN: Record<Saringan, string> = {
+  SEMUA: "Semua",
+  ONLINE: "Online",
+  OFFLINE: "Offline",
+};
 
+function keadaan(p: Perangkat) {
+  if (p.status_sos) return "SOS" as const;
+  return p.status_online ? ("ONLINE" as const) : ("OFFLINE" as const);
+}
 
-// =========================================================
-// MONITORING PAGE
-// =========================================================
+function Lencana({ p }: { p: Perangkat }) {
+  const k = keadaan(p);
 
-export default function MonitoringPage() {
-  const [perangkat, setPerangkat] =
-    useState<Perangkat[]>([]);
-
-  const [pengguna, setPengguna] =
-    useState<PenggunaTunanetra[]>([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
-
-  const [filter, setFilter] =
-    useState<
-      "semua" |
-      "online" |
-      "offline"
-    >("semua");
-
-  const [cari, setCari] =
-    useState("");
-
-
-  // =======================================================
-  // LOAD DATA
-  // =======================================================
-
-  const muat = useCallback(() => {
-    Promise.all([
-      api.get<Perangkat[]>(
-        "/perangkat"
-      ),
-
-      api
-        .get<PenggunaTunanetra[]>(
-          "/pengguna"
-        )
-        .catch(() => []),
-    ])
-      .then(([p, u]) => {
-        setPerangkat(p);
-        setPengguna(u);
-
-        setError("");
-      })
-      .catch((e) => {
-        setError(
-          e instanceof Error
-            ? e.message
-            : "Gagal memuat data"
-        );
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
-
-
-  // =======================================================
-  // INITIAL LOAD
-  // =======================================================
-
-  useEffect(() => {
-    muat();
-  }, [muat]);
-
-
-  // =======================================================
-  // SUPABASE REALTIME
-  // =======================================================
-
-  useRealtimeTable(
-    "perangkat",
-    muat
-  );
-
-
-  // =======================================================
-  // HELPERS
-  // =======================================================
-
-  function namaPengguna(
-    id: string | null
-  ) {
+  if (k === "SOS") {
     return (
-      pengguna.find(
-        (u) =>
-          u.id_tunanetra === id
-      )?.nama_tunanetra
-      ??
-      "Belum dipasangkan"
+      <span className="flex flex-none items-center rounded-pill bg-danger px-3 py-0.5 text-[13px] font-bold text-white">
+        SOS
+      </span>
     );
   }
-
-
-  function punyaLokasi(
-    p: Perangkat
-  ) {
-    return (
-      p.lat_terakhir != null &&
-      p.long_terakhir != null
-    );
-  }
-
-
-  // =======================================================
-  // FILTER
-  // =======================================================
-
-  const list = perangkat
-    .filter((p) => {
-      if (filter === "semua") {
-        return true;
-      }
-
-      if (filter === "online") {
-        return p.status_online;
-      }
-
-      return !p.status_online;
-    })
-    .filter((p) => {
-      const keyword =
-        cari.toLowerCase();
-
-      return (
-        namaPengguna(
-          p.dipakai_oleh
-        )
-          .toLowerCase()
-          .includes(keyword)
-        ||
-        p.id_perangkat
-          .toLowerCase()
-          .includes(keyword)
-      );
-    });
-
-
-  // =======================================================
-  // MAP MARKERS
-  // =======================================================
-
-  const markers = perangkat
-    .filter(
-      (p) =>
-        p.lat_terakhir != null &&
-        p.long_terakhir != null
-    )
-    .map((p) => ({
-      id_perangkat:
-        p.id_perangkat,
-
-      nama:
-        namaPengguna(
-          p.dipakai_oleh
-        ),
-
-      lat:
-        p.lat_terakhir as number,
-
-      lng:
-        p.long_terakhir as number,
-
-      online:
-        p.status_online,
-
-      sos:
-        p.status_sos,
-    }));
-
-
-  // =======================================================
-  // LOADING
-  // =======================================================
-
-  if (loading) {
-    return (
-      <p className="text-text-secondary">
-        Memuat data...
-      </p>
-    );
-  }
-
-
-  // =======================================================
-  // ERROR
-  // =======================================================
-
-  if (error) {
-    return (
-      <p className="text-danger">
-        Gagal memuat: {error}
-      </p>
-    );
-  }
-
-
-  // =======================================================
-  // UI
-  // =======================================================
 
   return (
-    <div>
+    <span
+      className={`flex flex-none items-center gap-1.5 rounded-pill px-3 py-0.5 text-[13px] font-bold ${
+        k === "ONLINE" ? "bg-success-soft text-success-text" : "bg-secondary-soft text-[#1F3556]"
+      }`}
+    >
+      <i className={`h-2 w-2 rounded-pill ${k === "ONLINE" ? "bg-live" : "bg-offline"}`} />
+      {k === "ONLINE" ? "Online" : "Offline"}
+    </span>
+  );
+}
 
-      {/* ===================================================
-          HEADER
-      =================================================== */}
+export default function MonitoringPage() {
+  const [perangkat, setPerangkat] = useState<Perangkat[]>([]);
+  const [memuat, setMemuat] = useState(true);
+  const [galat, setGalat] = useState("");
 
-      <PageHeader
-        title="Monitoring Lokasi"
-        subtitle="Pantau posisi pengguna secara real-time"
-      />
+  const [saringan, setSaringan] = useState<Saringan>("SEMUA");
+  const [cari, setCari] = useState("");
+  const [idPilih, setIdPilih] = useState<string | null>(null);
 
+  const muat = useCallback(() => {
+    api
+      .get<Perangkat[]>("/perangkat")
+      .then((data) => {
+        setPerangkat(data);
+        setGalat("");
+      })
+      .catch((e) => setGalat(e instanceof Error ? e.message : "Gagal memuat data"))
+      .finally(() => setMemuat(false));
+  }, []);
 
-      {/* ===================================================
-          CONTENT
-      =================================================== */}
+  useEffect(muat, [muat]);
+  useRealtimeTable("perangkat", muat);
 
-      <div
-        className="
-          flex
-          flex-col
-          gap-4
-          lg:h-[calc(100vh-11rem)]
-          lg:flex-row
-        "
-      >
+  const jumlah = {
+    online: perangkat.filter((p) => p.status_online && !p.status_sos).length,
+    offline: perangkat.filter((p) => !p.status_online && !p.status_sos).length,
+    sos: perangkat.filter((p) => p.status_sos).length,
+  };
 
-        {/* =================================================
-            DEVICE LIST
-        ================================================= */}
-
-        <aside
-          className="
-            max-h-96
-            w-full
-            flex-shrink-0
-            overflow-y-auto
-            rounded-card
-            bg-surface
-            p-4
-            shadow-card
-            lg:h-full
-            lg:max-h-none
-            lg:w-80
-          "
+  const ringkasan = (
+    <div className="flex flex-wrap gap-2.5">
+      {[
+        { warna: "bg-live", teks: `${jumlah.online} online` },
+        { warna: "bg-offline", teks: `${jumlah.offline} offline` },
+        { warna: "bg-danger", teks: `${jumlah.sos} SOS` },
+      ].map((s) => (
+        <span
+          key={s.teks}
+          className="flex h-[34px] items-center gap-2 rounded-pill bg-surface px-3.5 text-[13px] font-semibold text-text-secondary"
         >
+          <i className={`h-2 w-2 rounded-pill ${s.warna}`} />
+          {s.teks}
+        </span>
+      ))}
+    </div>
+  );
 
-          {/* ===============================================
-              TITLE
-          =============================================== */}
+  const judul = (
+    <PageHeader
+      title="Monitoring Lokasi"
+      subtitle="Pantau posisi pengguna secara real-time"
+      aksi={perangkat.length > 0 ? ringkasan : undefined}
+    />
+  );
 
-          <div
-            className="
-              mb-3
-              flex
-              items-center
-              justify-between
-            "
-          >
+  if (memuat) {
+    return (
+      <>
+        {judul}
+        <p className="text-[15px] text-text-secondary">Memuat perangkat…</p>
+      </>
+    );
+  }
 
-            <h2
-              className="
-                text-lg
-                font-semibold
-                text-text-primary
-              "
-            >
-              Daftar Perangkat
-            </h2>
+  if (galat) {
+    return (
+      <>
+        {judul}
+        <p className="rounded-inner bg-danger-soft px-[18px] py-3.5 text-[15px] text-danger-text">
+          Gagal memuat perangkat: {galat}
+        </p>
+      </>
+    );
+  }
 
+  const kunci = cari.trim().toLowerCase();
+  const terlihat = perangkat.filter((p) => {
+    const k = keadaan(p);
+    if (saringan === "ONLINE" && k === "OFFLINE") return false;
+    if (saringan === "OFFLINE" && k !== "OFFLINE") return false;
+    if (!kunci) return true;
+    return (
+      p.id_perangkat.toLowerCase().includes(kunci) ||
+      (p.pengguna?.nama_tunanetra ?? "").toLowerCase().includes(kunci)
+    );
+  });
 
-            <Badge tone="primary">
-              {perangkat.length} Perangkat
-            </Badge>
+  const berlokasi = perangkat.filter((p) => p.lat_terakhir != null && p.long_terakhir != null);
+  const pilih = perangkat.find((p) => p.id_perangkat === idPilih) ?? null;
+  const adaYangOffline = jumlah.offline > 0;
 
-          </div>
+  return (
+    <>
+      {judul}
 
+      <div className="grid items-stretch gap-5 lg:h-[620px] lg:grid-cols-[352px_minmax(0,1fr)]">
+        <aside
+          className="flex min-h-0 flex-col gap-3.5 rounded-card border-2 border-border bg-surface p-5"
+          aria-label="Daftar perangkat"
+        >
+          <h2 className="text-[18px] font-extrabold leading-7">Daftar perangkat</h2>
 
-          {/* ===============================================
-              SEARCH
-          =============================================== */}
-
-          <div
-            className="
-              relative
-              mb-3
-            "
-          >
-
-            <Search
-              size={16}
-              className="
-                absolute
-                left-3
-                top-1/2
-                -translate-y-1/2
-                text-text-secondary
-              "
-            />
-
-
+          <div className="relative">
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary" />
             <input
-              type="text"
-
-              placeholder="Cari pengguna atau ID..."
-
               value={cari}
-
-              onChange={(e) =>
-                setCari(
-                  e.target.value
-                )
-              }
-
-              className="
-                w-full
-                rounded-pill
-                border
-                border-border
-                py-2
-                pl-9
-                pr-3
-                text-sm
-              "
+              onChange={(e) => setCari(e.target.value)}
+              placeholder="Cari pengguna atau ID"
+              aria-label="Cari pengguna atau ID perangkat"
+              className="h-11 w-full rounded-field bg-field pl-11 pr-4 text-sm outline-none focus:shadow-[inset_0_0_0_2px_var(--color-ring)]"
             />
-
           </div>
 
-
-          {/* ===============================================
-              FILTER
-          =============================================== */}
-
-          <div
-            className="
-              mb-4
-              flex
-              gap-2
-            "
-          >
-
-            {(
-              [
-                "semua",
-                "online",
-                "offline",
-              ] as const
-            ).map((f) => (
-
-              <button
-                key={f}
-
-                onClick={() =>
-                  setFilter(f)
-                }
-
-                className={`
-                  rounded-pill
-                  px-4
-                  py-1.5
-                  text-sm
-                  font-medium
-                  capitalize
-
-                  ${
-                    filter === f
-                      ? "bg-primary text-white"
-                      : "border border-border-strong text-text-secondary"
-                  }
-                `}
-              >
-                {f}
-              </button>
-
-            ))}
-
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(LABEL_SARINGAN) as Saringan[]).map((s) => {
+              const n = s === "SEMUA" ? perangkat.length : s === "ONLINE" ? jumlah.online + jumlah.sos : jumlah.offline;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setSaringan(s)}
+                  aria-pressed={saringan === s}
+                  className={`flex h-9 items-center gap-1.5 rounded-pill px-4 text-[13px] transition-colors ${
+                    saringan === s
+                      ? "bg-secondary font-bold text-white"
+                      : "bg-surface font-semibold text-text-secondary shadow-[inset_0_0_0_1.5px_var(--color-border)] hover:bg-surface-sunken"
+                  }`}
+                >
+                  {LABEL_SARINGAN[s]}
+                  <span className="angka text-[13px] opacity-75">{n}</span>
+                </button>
+              );
+            })}
           </div>
 
-
-          {/* ===============================================
-              DEVICE CARDS
-          =============================================== */}
-
-          {list.length === 0 ? (
-
-            <p
-              className="
-                py-6
-                text-center
-                text-sm
-                text-text-secondary
-              "
-            >
-              Tidak ada perangkat.
+          {perangkat.length === 0 ? (
+            <p className="text-sm leading-5 text-text-secondary">
+              Belum ada perangkat terdaftar. Tambahkan tongkat lebih dulu di halaman Data perangkat.
             </p>
-
+          ) : terlihat.length === 0 ? (
+            <p className="text-sm leading-5 text-text-secondary">
+              {kunci
+                ? `Tidak ada perangkat yang cocok dengan “${cari.trim()}”.`
+                : saringan === "ONLINE"
+                  ? "Tidak ada perangkat yang sedang online."
+                  : "Semua perangkat sedang online."}
+            </p>
           ) : (
-
-            <div className="space-y-3">
-
-              {list.map((p) => {
-
-                const lokasiAda =
-                  punyaLokasi(p);
-
-
+            <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-1 py-0.5">
+              {terlihat.map((p, i) => {
+                const dipilih = p.id_perangkat === idPilih;
                 return (
-
-                  <div
+                  <button
                     key={p.id_perangkat}
-
-                    className={`
-                      rounded-card
-                      p-4
-                      transition-colors
-
-                      ${
-                        p.status_sos
-                          ? "bg-danger-soft"
-                          : p.status_online
-                          ? "bg-success-soft"
-                          : "bg-offline/10"
-                      }
-                    `}
+                    onClick={() => setIdPilih(dipilih ? null : p.id_perangkat)}
+                    aria-current={dipilih}
+                    className={`flex flex-col gap-3 rounded-card p-4 text-left transition-colors ${
+                      dipilih
+                        ? "bg-surface shadow-[inset_0_0_0_2.5px_var(--color-ring)]"
+                        : "bg-surface-sunken hover:bg-primary-soft"
+                    }`}
                   >
-
-                    {/* =====================================
-                        NAMA
-                    ===================================== */}
-
-                    <div
-                      className="
-                        text-lg
-                        font-semibold
-                        text-text-primary
-                      "
-                    >
-                      {namaPengguna(
-                        p.dipakai_oleh
-                      )}
-                    </div>
-
-
-                    {/* =====================================
-                        DEVICE ID
-                    ===================================== */}
-
-                    <div
-                      className="
-                        font-mono
-                        text-sm
-                        text-text-secondary
-                      "
-                    >
-                      {p.id_perangkat}
-                    </div>
-
-
-                    {/* =====================================
-                        LOCATION
-                    ===================================== */}
-
-                    <div
-                      className="
-                        mt-2
-                        flex
-                        items-start
-                        gap-2
-                        text-sm
-                        text-text-secondary
-                      "
-                    >
-
-                      <MapPin
-                        size={14}
-                        className="
-                          mt-0.5
-                          flex-shrink-0
-                        "
-                      />
-
-
-                      <span>
-
-                        {p.lokasi_terakhir
-                          ??
-                          (
-                            lokasiAda
-                              ? `${p.lat_terakhir?.toFixed?.(6) ?? p.lat_terakhir}, ${p.long_terakhir?.toFixed?.(6) ?? p.long_terakhir}`
-                              : "Lokasi belum tersedia"
-                          )
-                        }
-
-                      </span>
-
-                    </div>
-
-
-                    {/* =====================================
-                        STATUS
-                    ===================================== */}
-
-                    <div
-                      className="
-                        mt-3
-                        flex
-                        flex-wrap
-                        items-center
-                        gap-x-4
-                        gap-y-2
-                        text-sm
-                      "
-                    >
-
-                      {/* DEVICE ONLINE */}
-
+                    <span className="flex items-center gap-3">
                       <span
-                        className={`
-                          flex
-                          items-center
-                          gap-1
-                          font-medium
-
-                          ${
-                            p.status_online
-                              ? "text-success"
-                              : "text-offline"
-                          }
-                        `}
+                        className={`flex h-10 w-10 flex-none items-center justify-center rounded-pill text-[13px] font-extrabold ${
+                          i % 2 === 0 ? "bg-tile-amber text-[#5C3D00]" : "bg-tile-blue text-primary"
+                        }`}
                       >
-
-                        {p.status_online ? (
-                          <Wifi size={14} />
-                        ) : (
-                          <WifiOff size={14} />
-                        )}
-
-
-                        {p.status_online
-                          ? "Online"
-                          : "Offline"}
-
+                        {inisialNama(p.pengguna?.nama_tunanetra)}
                       </span>
-
-
-                      {/* LOCATION STATUS */}
-
-                      <span
-                        className={`
-                          flex
-                          items-center
-                          gap-1
-                          font-medium
-
-                          ${
-                            lokasiAda
-                              ? "text-primary"
-                              : "text-text-secondary"
-                          }
-                        `}
-                      >
-
-                        <Navigation
-                          size={14}
-                        />
-
-
-                        {lokasiAda
-                          ? "Lokasi tersedia"
-                          : "GPS belum aktif"}
-
+                      <span className="min-w-0 flex-1">
+                        <b className="block truncate font-bold leading-5">
+                          {p.pengguna?.nama_tunanetra ?? "Belum dipasangkan"}
+                        </b>
+                        <span className="data block text-[13px] leading-4 text-text-secondary">
+                          {p.id_perangkat}
+                        </span>
                       </span>
+                      <Lencana p={p} />
+                    </span>
 
-                    </div>
-
-
-                    {/* =====================================
-                        BATTERY
-                    ===================================== */}
-
-                    <div
-                      className="
-                        mt-2
-                        flex
-                        items-center
-                        gap-1
-                        text-sm
-                        text-text-secondary
-                      "
-                    >
-
-                      <BatteryMedium
-                        size={14}
-                      />
-
-
-                      <span>
-                        Baterai:{" "}
-                        {p.baterai_terakhir
-                          ?? "-"}%
+                    <span className="flex flex-col gap-1 text-[13px] leading-5">
+                      <span className="flex items-center gap-2">
+                        <Clock size={15} strokeWidth={2} className="flex-none text-text-secondary" />
+                        {p.status_online ? "Terhubung sekarang" : `Terakhir terlihat ${waktuRelatif(p.last_active)}`}
                       </span>
-
-                    </div>
-
-
-                    {/* =====================================
-                        OPEN DETAIL
-                    ===================================== */}
-
-                    <Link
-                      href={
-                        `/monitoring/${p.id_perangkat}`
-                      }
-
-                      className="
-                        mt-4
-                        flex
-                        w-full
-                        items-center
-                        justify-center
-                        gap-2
-                        rounded-input
-                        bg-primary
-                        px-4
-                        py-2
-                        text-sm
-                        font-medium
-                        text-white
-                        hover:bg-primary-hover
-                      "
-                    >
-
-                      <Navigation
-                        size={15}
-                      />
-
-                      Buka Monitoring
-
-                    </Link>
-
-                  </div>
-
+                      <span className="flex items-center gap-2 text-text-secondary">
+                        <MapPin size={15} strokeWidth={2} className="flex-none" />
+                        <span className="truncate">{p.lokasi_terakhir ?? "Lokasi belum diketahui"}</span>
+                      </span>
+                      <span className="flex items-center gap-2 text-text-secondary">
+                        <BatteryMedium size={15} strokeWidth={2} className="flex-none" />
+                        {p.baterai_terakhir == null ? "Baterai belum ada data" : `Baterai ${p.baterai_terakhir}%`}
+                      </span>
+                    </span>
+                  </button>
                 );
               })}
-
             </div>
-
           )}
-
         </aside>
 
-
-        {/* =================================================
-            MAP
-        ================================================= */}
-
-        <div
-          className="
-            relative
-            h-96
-            flex-1
-            overflow-hidden
-            rounded-card
-            shadow-card
-            lg:h-full
-          "
+        <section
+          className="relative h-[420px] overflow-hidden rounded-card border-2 border-border bg-surface-sunken lg:h-auto"
+          aria-label="Peta lokasi perangkat"
         >
+          {berlokasi.length === 0 ? (
+            <div className="flex h-full items-center justify-center p-8">
+              <p className="max-w-sm text-center text-[15px] leading-6 text-text-secondary">
+                Belum ada koordinat yang masuk. Peta akan terisi begitu tongkat mengirim posisi pertamanya.
+              </p>
+            </div>
+          ) : (
+            <>
+              <MapView
+                markers={berlokasi.map((p) => ({
+                  id_perangkat: p.id_perangkat,
+                  nama: p.pengguna?.nama_tunanetra ?? p.id_perangkat,
+                  lat: p.lat_terakhir as number,
+                  lng: p.long_terakhir as number,
+                  online: p.status_online,
+                  sos: p.status_sos,
+                }))}
+              />
 
-          <MapView
-            markers={markers}
-          />
+              {adaYangOffline && (
+                <div className="pointer-events-none absolute left-[60px] right-4 top-4 z-[500] flex items-center gap-2.5 rounded-inner border-2 border-border bg-surface px-3.5 py-2.5 text-sm leading-5 shadow-card">
+                  <WifiOff size={18} strokeWidth={2} className="flex-none text-offline" />
+                  <span>
+                    <b className="font-semibold">
+                      {jumlah.offline === perangkat.length
+                        ? "Semua perangkat offline."
+                        : `${jumlah.offline} perangkat offline.`}
+                    </b>{" "}
+                    Titiknya adalah lokasi terakhir yang diterima, bukan posisi saat ini.
+                  </span>
+                </div>
+              )}
 
-        </div>
+              <div className="pointer-events-none absolute bottom-4 left-4 z-[500] flex gap-4 rounded-inner border-2 border-border bg-surface px-3 py-2 text-[13px] leading-4 text-text-secondary">
+                {[
+                  { warna: "bg-live", teks: "Online" },
+                  { warna: "bg-offline", teks: "Offline" },
+                  { warna: "bg-danger", teks: "SOS" },
+                ].map((l) => (
+                  <span key={l.teks} className="flex items-center gap-1.5">
+                    <i className={`h-2.5 w-2.5 rounded-pill ${l.warna}`} />
+                    {l.teks}
+                  </span>
+                ))}
+              </div>
 
+              {pilih && (
+                <div className="animate-fade-up absolute bottom-7 right-4 z-[500] flex w-[320px] max-w-[calc(100%-2rem)] flex-col gap-3 rounded-card bg-surface p-4 shadow-float">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-[17px] font-extrabold leading-6">
+                        {pilih.pengguna?.nama_tunanetra ?? "Belum dipasangkan"}
+                      </h3>
+                      <span className="data text-[13px] text-text-secondary">{pilih.id_perangkat}</span>
+                    </div>
+                    <Lencana p={pilih} />
+                  </div>
+
+                  <dl className="grid grid-cols-[104px_minmax(0,1fr)] gap-x-2 gap-y-1.5 text-[13px] leading-5">
+                    <dt className="text-text-secondary">Terakhir terlihat</dt>
+                    <dd className="font-medium">
+                      {pilih.status_online ? "Terhubung sekarang" : waktuRelatif(pilih.last_active)}
+                    </dd>
+
+                    <dt className="text-text-secondary">Lokasi</dt>
+                    <dd className="font-medium">{pilih.lokasi_terakhir ?? "Belum diketahui"}</dd>
+
+                    <dt className="text-text-secondary">Koordinat</dt>
+                    <dd className="data font-medium">
+                      {koordinat(pilih.lat_terakhir, pilih.long_terakhir) ?? "—"}
+                    </dd>
+
+                    <dt className="text-text-secondary">Baterai</dt>
+                    <dd className="font-medium">
+                      {pilih.baterai_terakhir == null ? "Belum ada data" : `${pilih.baterai_terakhir}%`}
+                    </dd>
+                  </dl>
+
+                  <Link
+                    href={`/monitoring/${pilih.id_perangkat}`}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-input bg-secondary px-5 text-sm font-bold text-white transition-colors hover:bg-primary-hover"
+                  >
+                    <Navigation size={17} strokeWidth={2.2} />
+                    Buka monitoring
+                  </Link>
+                </div>
+              )}
+            </>
+          )}
+        </section>
       </div>
-
-    </div>
+    </>
   );
 }

@@ -2,10 +2,9 @@
 
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Home, MapPin, BatteryMedium, Siren, Smartphone, Users, ShieldCheck, LogOut } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
-import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/cn";
 
 const MENU_UMUM = [
@@ -25,18 +24,14 @@ export function Sidebar({
   isAdmin,
   jumlahMenunggu = 0,
   onNavigate,
+  onKeluar,
 }: {
   isAdmin: boolean;
   jumlahMenunggu?: number;
   onNavigate?: () => void;
+  onKeluar: () => void;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
-
-  async function keluar() {
-    await supabase.auth.signOut();
-    router.replace("/login");
-  }
 
   function kelas(href: string) {
     const aktif = pathname === href || pathname.startsWith(`${href}/`);
@@ -86,7 +81,7 @@ export function Sidebar({
 
       <div className="mt-auto border-t border-white/[0.18] pt-3">
         <button
-          onClick={keluar}
+          onClick={onKeluar}
           className="flex h-10 w-full items-center gap-3 rounded-nav px-3 text-left text-sm font-semibold text-nav transition-colors hover:bg-white/10"
         >
           <LogOut size={18} strokeWidth={2} />

@@ -9,6 +9,7 @@ import { api } from "@/lib/api-client";
 import { useSession } from "@/hooks/useSession";
 import { YayasanPicker, Yayasan } from "@/components/ui/YayasanPicker";
 import { Button } from "@/components/ui/Button";
+import { KonfirmasiKeluar } from "@/components/ui/KonfirmasiKeluar";
 
 const PESAN = {
   MENUNGGU: {
@@ -40,6 +41,7 @@ export default function StatusAkunPage() {
   const [galat, setGalat] = useState("");
   const [sukses, setSukses] = useState("");
   const [mengirim, setMengirim] = useState(false);
+  const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false);
 
   useEffect(() => {
     if (memuat) return;
@@ -149,10 +151,12 @@ export default function StatusAkunPage() {
           </div>
         )}
 
-        <Button variant="secondary" onClick={keluar} className="mt-4 w-full">
+        <Button variant="secondary" onClick={() => setKonfirmasiKeluar(true)} className="mt-4 w-full">
           Keluar
         </Button>
       </div>
+
+      {konfirmasiKeluar && <KonfirmasiKeluar onBatal={() => setKonfirmasiKeluar(false)} onKeluar={keluar} />}
     </main>
   );
 }
