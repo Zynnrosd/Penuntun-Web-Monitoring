@@ -135,10 +135,10 @@ export default function NotifikasiPage() {
             icon={<AlertTriangle size={22} strokeWidth={2.2} />}
           />
           <StatCard
-            label="Sedang ditangani"
-            value={jumlah.DITANGANI}
+            label="Selesai"
+            value={jumlah.SELESAI}
             tone="success"
-            icon={<UserCheck size={22} strokeWidth={2.2} />}
+            icon={<Check size={22} strokeWidth={2.2} />}
           />
           <StatCard
             label="Pengiriman WhatsApp gagal"
