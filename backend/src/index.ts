@@ -15,6 +15,7 @@ import pengawasRoutes from "./routes/pengawas.routes";
 
 import { startDeviceStatusMonitor } from "./services/device-status.service";
 import { mulaiMqttListener } from "./mqtt/listener";
+import { mulaiPengirimWhatsApp } from "./services/whatsapp.service";
 
 const app = express();
 
@@ -57,5 +58,12 @@ app.listen(Number(env.PORT), () => {
     console.log("[MQTT] Listener MQTT dijalankan.");
   } catch (error) {
     console.error("[MQTT] Gagal menjalankan listener MQTT:", error);
+  }
+
+    try {
+    mulaiPengirimWhatsApp();
+    console.log("[WHATSAPP] Pengirim ulang WhatsApp aktif.");
+  } catch (error) {
+    console.error("[WHATSAPP] Gagal menjalankan pengirim WhatsApp:", error);
   }
 });
