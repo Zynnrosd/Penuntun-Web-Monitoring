@@ -45,6 +45,13 @@ interface HeartbeatPayload {
   timestamp?: string;
 }
 
+interface PowerPayload {
+  id_perangkat: string;
+  tegangan_5v: number;
+  undervoltage: boolean;
+  timestamp?: string;
+}
+
 // =========================================================
 // MQTT TOPICS
 // =========================================================
@@ -54,6 +61,7 @@ const TOPIC_DETECTION = "penuntun/detection/#";
 const TOPIC_STATUS = "penuntun/status/#";
 // USULAN, belum disepakati dengan tim perangkat.
 const TOPIC_SOS = "penuntun/sos/#";
+const TOPIC_POWER = "penuntun/power/#";
 
 // Titik riwayat disimpan paling cepat sekali setiap 5 menit per perangkat.
 // Lokasi terakhir di tabel perangkat tetap diperbarui setiap pesan GPS (~10 detik).
@@ -143,6 +151,19 @@ function isValidSos(data: unknown): data is SosPayload {
   return (
     koordinatValid(data.latitude, 90) &&
     koordinatValid(data.longitude, 180) &&
+    (data.timestamp === undefined || typeof data.timestamp === "string")
+  );
+}
+
+function isValidPower(data: unknown): data is PowerPayload {
+  return (
+    isObject(data) &&
+    validId(data.id_perangkat) &&
+    typeof data.tegangan_5v === "number" &&
+    Number.isFinite(data.tegangan_5v) &&
+    data.tegangan_5v >= 0 &&
+    data.tegangan_5v <= 7 &&
+    typeof data.undervoltage === "boolean" &&
     (data.timestamp === undefined || typeof data.timestamp === "string")
   );
 }
@@ -436,6 +457,34 @@ async function prosesSos(data: SosPayload): Promise<void> {
 }
 
 // =========================================================
+// STATUS DAYA RASPBERRY PI 5
+// =========================================================
+
+async function prosesPower(data: PowerPayload): Promise<void> {
+  const { id_perangkat, tegangan_5v, undervoltage } = data;
+
+  // Tanggal dari server agar data yang terlambat tidak tampak sebagai data terbaru.
+  const { data: perangkat, error } = await supabase
+    .from("perangkat")
+    .update({
+      tegangan_5v,
+      undervoltage,
+      daya_updated_at: new Date().toISOString(),
+    })
+    .eq("id_perangkat", id_perangkat)
+    .select("id_perangkat")
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[POWER] Gagal update ${id_perangkat}:`, error.message);
+  } else if (!perangkat) {
+    console.warn(`[POWER] Perangkat tidak ditemukan: ${id_perangkat}`);
+  } else {
+    console.log(`[POWER] ${id_perangkat} ${tegangan_5v.toFixed(3)} V | ${undervoltage ? "UNDERVOLTAGE" : "NORMAL"}`);
+  }
+}
+
+// =========================================================
 // PROSES AI DETECTION
 // =========================================================
 
@@ -503,7 +552,7 @@ export function mulaiMqttListener(): MqttClient | undefined {
     console.log("[MQTT] Terhubung ke broker.");
 
     client.subscribe(
-      [TOPIC_STATUS, TOPIC_TELEMETRY, TOPIC_DETECTION, TOPIC_SOS],
+      [TOPIC_STATUS, TOPIC_TELEMETRY, TOPIC_DETECTION, TOPIC_SOS, TOPIC_POWER],
       { qos: 0 },
       (error) => {
         if (error) {
@@ -516,6 +565,7 @@ export function mulaiMqttListener(): MqttClient | undefined {
         console.log(`       ${TOPIC_TELEMETRY}`);
         console.log(`       ${TOPIC_DETECTION}`);
         console.log(`       ${TOPIC_SOS}`);
+        console.log(`       ${TOPIC_POWER}`);
         console.log("========================================\n");
       }
     );
@@ -573,6 +623,19 @@ export function mulaiMqttListener(): MqttClient | undefined {
           return;
         }
         await prosesDetection(data);
+        return;
+      }
+
+      if (topic.startsWith("penuntun/power/")) {
+        if (!isValidPower(data)) {
+          console.error("[POWER] Payload tidak valid:", data);
+          return;
+        }
+        if (!topicMatchesDevice(topic, data.id_perangkat)) {
+          console.warn(`[POWER] ID topic dan payload berbeda: ${topic}`);
+          return;
+        }
+        await prosesPower(data);
         return;
       }
 
