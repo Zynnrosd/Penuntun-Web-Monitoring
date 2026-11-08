@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -205,7 +204,7 @@ export default function BateraiPage() {
             </p>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div className="max-h-[max(260px,calc(100vh-400px))] overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-secondary-soft">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-secondary-soft text-left text-[13px] font-bold uppercase tracking-[0.06em] text-[#3F5B82]">

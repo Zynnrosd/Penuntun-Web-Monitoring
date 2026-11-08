@@ -31,7 +31,8 @@ export default function PerangkatPage() {
   const [tab, setTab] = useState<Tab>("perangkat");
   const [perangkat, setPerangkat] = useState<Perangkat[]>([]);
   const [pengguna, setPengguna] = useState<PenggunaTunanetra[]>([]);
-  const [zonaYayasan, setZonaYayasan] = useState<Geofence | null>(null);
+  const [zona, setZona] = useState<Geofence[]>([]);
+  const [sasaran, setSasaran] = useState("yayasan");
   const [memuat, setMemuat] = useState(true);
   const [galat, setGalat] = useState("");
 
@@ -45,6 +46,9 @@ export default function PerangkatPage() {
   const [radius, setRadius] = useState(300);
   const [pesanZona, setPesanZona] = useState("");
 
+  const zonaYayasan = zona.find((z) => z.id_perangkat === null) ?? null;
+  const zonaKhusus = sasaran === "yayasan" ? null : (zona.find((z) => z.id_perangkat === sasaran) ?? null);
+
   const muat = useCallback(() => {
     Promise.all([
       api.get<Perangkat[]>("/perangkat"),
@@ -55,11 +59,12 @@ export default function PerangkatPage() {
         setPerangkat(p);
         setPengguna(u);
 
-        const zona = g.find((z) => z.id_perangkat === null) ?? null;
-        setZonaYayasan(zona);
-        if (zona) {
-          setPusat({ lat: Number(zona.center_lat), lng: Number(zona.center_long) });
-          setRadius(zona.radius_meter);
+        setZona(g);
+        setSasaran("yayasan");
+        const zonaDefault = g.find((z) => z.id_perangkat === null);
+        if (zonaDefault) {
+          setPusat({ lat: Number(zonaDefault.center_lat), lng: Number(zonaDefault.center_long) });
+          setRadius(zonaDefault.radius_meter);
         }
       })
       .catch((e) => setGalat(e instanceof Error ? e.message : "Gagal memuat data"))
@@ -112,21 +117,52 @@ export default function PerangkatPage() {
     }
   }
 
+  function pilihSasaran(nilai: string) {
+    setSasaran(nilai);
+    setPesanZona("");
+    setGalatAksi("");
+    const acuan = (nilai === "yayasan" ? null : zona.find((z) => z.id_perangkat === nilai)) ?? zonaYayasan;
+    if (acuan) {
+      setPusat({ lat: Number(acuan.center_lat), lng: Number(acuan.center_long) });
+      setRadius(acuan.radius_meter);
+    }
+  }
+
   async function simpanZona() {
     setPesanZona("");
     setGalatAksi("");
     setSibuk(true);
     try {
-      const zona = await api.put<Geofence>("/geofence/yayasan", {
-        nama_area: zonaYayasan?.nama_area ?? null,
+      const alamat = sasaran === "yayasan" ? "/geofence/yayasan" : `/geofence/${encodeURIComponent(sasaran)}`;
+      const hasil = await api.put<Geofence>(alamat, {
+        nama_area: (sasaran === "yayasan" ? zonaYayasan : zonaKhusus)?.nama_area ?? null,
         center_lat: pusat.lat,
         center_long: pusat.lng,
         radius_meter: radius,
       });
-      setZonaYayasan(zona);
-      setPesanZona("Zona aman tersimpan.");
+      setZona((lama) => [...lama.filter((z) => z.id_geofence !== hasil.id_geofence), hasil]);
+      setPesanZona(sasaran === "yayasan" ? "Zona yayasan tersimpan." : `Zona khusus ${sasaran} tersimpan.`);
     } catch (err) {
       setGalatAksi(err instanceof Error ? err.message : "Gagal menyimpan zona");
+    } finally {
+      setSibuk(false);
+    }
+  }
+
+  async function hapusZonaKhusus() {
+    setPesanZona("");
+    setGalatAksi("");
+    setSibuk(true);
+    try {
+      await api.delete(`/geofence/${encodeURIComponent(sasaran)}`);
+      setZona((lama) => lama.filter((z) => z.id_perangkat !== sasaran));
+      if (zonaYayasan) {
+        setPusat({ lat: Number(zonaYayasan.center_lat), lng: Number(zonaYayasan.center_long) });
+        setRadius(zonaYayasan.radius_meter);
+      }
+      setPesanZona("Zona khusus dihapus. Perangkat ini kembali memakai zona yayasan.");
+    } catch (err) {
+      setGalatAksi(err instanceof Error ? err.message : "Gagal menghapus zona khusus");
     } finally {
       setSibuk(false);
     }
@@ -206,7 +242,7 @@ export default function PerangkatPage() {
                     : "Belum ada tongkat terdaftar. Hubungi Administrator yayasan untuk mendaftarkan perangkat."}
                 </p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="max-h-[max(260px,calc(100vh-340px))] overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-secondary-soft">
                   <table className="w-full">
                     <thead>
                       <tr className="bg-secondary-soft text-left text-[13px] font-bold uppercase tracking-[0.06em] text-[#3F5B82]">
@@ -285,35 +321,51 @@ export default function PerangkatPage() {
             </p>
           </>
         ) : (
-          <div className="flex flex-col gap-5 lg:flex-row">
-            <div className="h-[420px] min-w-0 flex-1 overflow-hidden rounded-card border-2 border-border">
-              <PetaZona center={pusat} radius={radius} onPick={(lat, lng) => setPusat({ lat, lng })} />
+          <div className="flex flex-col gap-5 lg:h-[calc(100vh-240px)] lg:min-h-[520px] lg:flex-row">
+            <div className="h-[420px] min-w-0 flex-1 overflow-hidden rounded-card border-2 border-border lg:h-auto">
+              <PetaZona key={sasaran} center={pusat} radius={radius} onPick={(lat, lng) => setPusat({ lat, lng })} />
             </div>
 
-            <aside className="flex w-full flex-none flex-col gap-4 rounded-card border-2 border-border bg-surface p-5 lg:w-[340px]">
-              <div>
-                <h2 className="text-[17px] font-extrabold leading-6">Zona yayasan</h2>
-                <p className="mt-1 text-sm leading-5 text-text-secondary">
-                  Berlaku untuk semua perangkat yayasan. Perangkat di luar lingkaran ini memicu notifikasi.
-                </p>
-              </div>
+            <aside className="flex w-full flex-none flex-col gap-4 overflow-y-auto rounded-card border-2 border-border bg-surface p-5 lg:w-[340px]">
+              <h2 className="text-[17px] font-extrabold leading-6">
+                {sasaran === "yayasan" ? "Zona yayasan (default)" : `Zona ${sasaran}`}
+              </h2>
+
+              <label className="flex flex-col gap-1.5 text-sm font-bold">
+                Atur zona untuk
+                <select
+                  value={sasaran}
+                  onChange={(e) => pilihSasaran(e.target.value)}
+                  className="h-11 rounded-field bg-field px-3 text-sm font-normal outline-none focus:bg-surface focus:shadow-[inset_0_0_0_2px_var(--color-ring)]"
+                >
+                  <option value="yayasan">Zona yayasan (default)</option>
+                  {perangkat.map((p) => (
+                    <option key={p.id_perangkat} value={p.id_perangkat}>
+                      {p.id_perangkat}
+                      {p.pengguna?.nama_tunanetra ? ` · ${p.pengguna.nama_tunanetra}` : ""}
+                      {zona.some((z) => z.id_perangkat === p.id_perangkat) ? " · zona khusus" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <div>
-                <div className="mb-1.5 text-sm font-bold">Titik pusat</div>
+                <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-bold">Titik pusat</span>
+                  <span className="text-[13px] text-text-secondary">Geser titik biru atau ketuk peta</span>
+                </div>
                 <div className="data flex h-11 items-center rounded-field bg-field px-4 text-[13px]">
                   {pusat.lat.toFixed(6)}, {pusat.lng.toFixed(6)}
                 </div>
-                <p className="mt-1.5 text-sm text-text-secondary">Ketuk peta untuk memindahkan titik pusat.</p>
               </div>
 
               <Field
-                label="Radius (meter)"
+                label={`Radius (meter, minimal ${RADIUS_MIN})`}
                 type="number"
                 min={RADIUS_MIN}
                 max={20000}
                 value={radius}
                 onChange={(e) => setRadius(Number(e.target.value))}
-                hint={`Minimal ${RADIUS_MIN} meter.`}
                 disabled={!isAdmin}
               />
 
@@ -328,9 +380,29 @@ export default function PerangkatPage() {
                   Hanya Administrator yang dapat mengubah zona aman.
                 </p>
               ) : (
-                <Button onClick={simpanZona} disabled={sibuk || radius < RADIUS_MIN} className="mt-auto w-full">
-                  {sibuk ? "Menyimpan…" : zonaYayasan ? "Simpan perubahan" : "Simpan zona"}
-                </Button>
+                <div className="mt-auto flex flex-col gap-2">
+                  <Button onClick={simpanZona} disabled={sibuk || radius < RADIUS_MIN} className="w-full">
+                    {sibuk
+                      ? "Menyimpan…"
+                      : sasaran === "yayasan"
+                      ? zonaYayasan
+                        ? "Simpan perubahan"
+                        : "Simpan zona"
+                      : zonaKhusus
+                      ? "Simpan perubahan"
+                      : "Simpan zona khusus"}
+                  </Button>
+                  {zonaKhusus && (
+                    <button
+                      onClick={hapusZonaKhusus}
+                      disabled={sibuk}
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-input bg-surface px-5 text-sm font-bold text-danger-text shadow-[inset_0_0_0_2px_var(--color-danger)] transition-colors hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Trash2 size={16} />
+                      Hapus zona khusus
+                    </button>
+                  )}
+                </div>
               )}
             </aside>
           </div>

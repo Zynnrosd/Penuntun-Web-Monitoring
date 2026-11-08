@@ -2,7 +2,7 @@
 
 "use client";
 import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 
 function pinIcon(color: string) {
@@ -33,6 +33,20 @@ const iconOnline = pinIcon(WARNA.online);
 const iconOffline = pinIcon(WARNA.offline);
 const iconSOS = pinIcon(WARNA.sos);
 
+function iconTitikHenti(nomor: number) {
+  return new L.DivIcon({
+    className: "",
+    html: `
+      <div style="width:24px;height:24px;border-radius:9999px;background:${WARNA.rute};
+        border:2px solid white;color:white;font:700 11px/20px var(--font-data);text-align:center;
+        box-shadow:0 1px 3px rgba(0,0,0,.35)">${nomor}</div>
+    `,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12],
+  });
+}
+
 export type MarkerData = {
   id_perangkat: string;
   nama: string;
@@ -42,15 +56,17 @@ export type MarkerData = {
   sos?: boolean;
 };
 
-type PathPoint = { lat: number; lng: number };
+export type TitikHenti = { lat: number; lng: number; nomor: number; jam: string };
+
+export type ZonaAman = { lat: number; lng: number; radius: number; khusus?: boolean };
 
 // Menghitung ulang ukuran peta (mencegah tampilan kotak-kotak) lalu mengarahkan
-// tampilan ke marker dan riwayat. Hanya berjalan saat koordinat benar-benar berubah,
+// tampilan ke marker dan titik henti. Hanya berjalan saat koordinat benar-benar berubah,
 // supaya zoom atau geseran pengguna tidak ditarik balik oleh render ulang halaman.
-function MapController({ markers, path }: { markers: MarkerData[]; path?: PathPoint[] }) {
+function MapController({ markers, titikHenti }: { markers: MarkerData[]; titikHenti?: TitikHenti[] }) {
   const map = useMap();
 
-  const kunci = markers.map((m) => `${m.lat},${m.lng}`).join("|") + "#" + (path?.length ?? 0);
+  const kunci = markers.map((m) => `${m.lat},${m.lng}`).join("|") + "#" + (titikHenti?.length ?? 0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -58,7 +74,7 @@ function MapController({ markers, path }: { markers: MarkerData[]; path?: PathPo
 
       const points: L.LatLngExpression[] = [];
       markers.forEach((marker) => points.push([marker.lat, marker.lng]));
-      path?.forEach((point) => points.push([point.lat, point.lng]));
+      titikHenti?.forEach((titik) => points.push([titik.lat, titik.lng]));
 
       if (points.length === 0) return;
 
@@ -81,15 +97,23 @@ function MapController({ markers, path }: { markers: MarkerData[]; path?: PathPo
   return null;
 }
 
-export function MapView({ markers, path }: { markers: MarkerData[]; path?: PathPoint[] }) {
+export function MapView({
+  markers,
+  titikHenti,
+  zona,
+}: {
+  markers: MarkerData[];
+  titikHenti?: TitikHenti[];
+  zona?: ZonaAman[];
+}) {
   // Cadangan bila belum ada data lokasi: Semarang.
   const defaultCenter: [number, number] = [-6.9932, 110.4203];
 
   const center: [number, number] =
     markers.length > 0
       ? [markers[0].lat, markers[0].lng]
-      : path && path.length > 0
-      ? [path[0].lat, path[0].lng]
+      : titikHenti && titikHenti.length > 0
+      ? [titikHenti[0].lat, titikHenti[0].lng]
       : defaultCenter;
 
   return (
@@ -100,19 +124,37 @@ export function MapView({ markers, path }: { markers: MarkerData[]; path?: PathP
       className="h-full w-full"
       style={{ width: "100%", height: "100%", minHeight: "300px" }}
     >
-      <MapController markers={markers} path={path} />
+      <MapController markers={markers} titikHenti={titikHenti} />
 
       <TileLayer
         attribution="&copy; OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      {path && path.length > 1 && (
-        <Polyline
-          positions={path.map((point) => [point.lat, point.lng])}
-          pathOptions={{ color: WARNA.rute, weight: 4, opacity: 0.85 }}
+      {zona?.map((z, i) => (
+        <Circle
+          key={i}
+          center={[z.lat, z.lng]}
+          radius={z.radius}
+          interactive={false}
+          pathOptions={{
+            color: "#1B3A5C",
+            weight: 2,
+            dashArray: z.khusus ? undefined : "6 6",
+            fillColor: "#1B3A5C",
+            fillOpacity: z.khusus ? 0.14 : 0.06,
+          }}
         />
-      )}
+      ))}
+
+      {titikHenti?.map((titik) => (
+        <Marker key={titik.nomor} position={[titik.lat, titik.lng]} icon={iconTitikHenti(titik.nomor)}>
+          <Popup>
+            <div style={{ fontWeight: 700 }}>Titik henti {titik.nomor}</div>
+            <div style={{ marginTop: "4px" }}>Mulai berhenti {titik.jam}</div>
+          </Popup>
+        </Marker>
+      ))}
 
       {markers.map((marker) => {
         const icon = marker.sos ? iconSOS : marker.online ? iconOnline : iconOffline;

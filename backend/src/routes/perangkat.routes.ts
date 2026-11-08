@@ -1,4 +1,3 @@
-
 import { Router } from "express";
 import {
   requireAuth,
@@ -8,6 +7,7 @@ import {
   db,
 } from "../lib/auth";
 import { balasGalat, balasGalatRpc } from "../lib/galat";
+import { awalHariIniWIB } from "../lib/waktu";
 
 const router = Router();
 
@@ -42,7 +42,7 @@ router.get("/", async (req, res) => {
 });
 
 // =========================================================
-// GET - RIWAYAT PERJALANAN
+// GET - RIWAYAT PERJALANAN (TITIK HENTI HARI INI)
 // =========================================================
 
 router.get("/:id/riwayat", async (req, res) => {
@@ -52,7 +52,8 @@ router.get("/:id/riwayat", async (req, res) => {
       "id_tracking, latitude, longitude, baterai, recorded_at"
     )
     .eq("id_perangkat", req.params.id)
-    .order("recorded_at", { ascending: false })
+    .gte("recorded_at", awalHariIniWIB())
+    .order("recorded_at", { ascending: true })
     .limit(200);
 
   if (error) {

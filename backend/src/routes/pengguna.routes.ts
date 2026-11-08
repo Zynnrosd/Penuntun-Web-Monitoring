@@ -7,7 +7,7 @@ import { balasGalat } from "../lib/galat";
 const router = Router();
 router.use(requireAuth, requireAktif);
 
-const KOLOM = "id_tunanetra, id_yayasan, nama_tunanetra, alamat";
+const KOLOM = "id_tunanetra, id_yayasan, nama_tunanetra, alamat, created_at";
 
 router.get("/", async (req, res) => {
   const { data, error } = await db(req).from("pengguna_tunanetra").select(KOLOM).order("nama_tunanetra");

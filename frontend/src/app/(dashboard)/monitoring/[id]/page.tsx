@@ -5,13 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Route, WifiOff } from "lucide-react";
+import { ArrowLeft, ChevronDown, Route, WifiOff } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useRealtimePutus, useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { inisialNama } from "@/hooks/useSession";
 import { jamWIB, koordinat, waktuRelatif } from "@/lib/format";
-import type { Perangkat, PenggunaTunanetra } from "@/types";
+import type { Perangkat, PenggunaTunanetra, Geofence } from "@/types";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((m) => m.MapView), { ssr: false });
 
@@ -28,10 +28,12 @@ export default function MonitoringDetailPage() {
 
   const [perangkat, setPerangkat] = useState<Perangkat | null>(null);
   const [pengguna, setPengguna] = useState<PenggunaTunanetra[]>([]);
+  const [zona, setZona] = useState<Geofence[]>([]);
   const [memuat, setMemuat] = useState(true);
   const [galat, setGalat] = useState("");
 
   const [riwayat, setRiwayat] = useState<TitikRiwayat[] | null>(null);
+  const [riwayatTerbuka, setRiwayatTerbuka] = useState(false);
   const [memuatRiwayat, setMemuatRiwayat] = useState(false);
   const [galatRiwayat, setGalatRiwayat] = useState("");
 
@@ -39,10 +41,12 @@ export default function MonitoringDetailPage() {
     Promise.all([
       api.get<Perangkat[]>("/perangkat"),
       api.get<PenggunaTunanetra[]>("/pengguna").catch(() => [] as PenggunaTunanetra[]),
+      api.get<Geofence[]>("/geofence").catch(() => [] as Geofence[]),
     ])
-      .then(([daftarPerangkat, daftarPengguna]) => {
+      .then(([daftarPerangkat, daftarPengguna, daftarZona]) => {
         setPerangkat(daftarPerangkat.find((p) => p.id_perangkat === id) ?? null);
         setPengguna(daftarPengguna);
+        setZona(daftarZona);
         setGalat("");
       })
       .catch((e) => setGalat(e instanceof Error ? e.message : "Gagal memuat data"))
@@ -54,16 +58,32 @@ export default function MonitoringDetailPage() {
 
   const koneksiPutus = useRealtimePutus();
 
-  async function muatRiwayat() {
-    setGalatRiwayat("");
-    setMemuatRiwayat(true);
-    try {
-      setRiwayat(await api.get<TitikRiwayat[]>(`/perangkat/${encodeURIComponent(id)}/riwayat`));
-    } catch (err) {
-      setGalatRiwayat(err instanceof Error ? err.message : "Gagal memuat riwayat perjalanan");
-    } finally {
-      setMemuatRiwayat(false);
+  const muatRiwayat = useCallback(
+    () =>
+      api
+        .get<TitikRiwayat[]>(`/perangkat/${encodeURIComponent(id)}/riwayat`)
+        .then((data) => {
+          setRiwayat(data);
+          setGalatRiwayat("");
+        })
+        .catch((err) => setGalatRiwayat(err instanceof Error ? err.message : "Gagal memuat riwayat perjalanan")),
+    [id]
+  );
+
+  useEffect(() => {
+    muatRiwayat();
+  }, [muatRiwayat]);
+
+  async function toggleRiwayat() {
+    if (riwayatTerbuka) {
+      setRiwayatTerbuka(false);
+      return;
     }
+
+    setRiwayatTerbuka(true);
+    setMemuatRiwayat(true);
+    await muatRiwayat();
+    setMemuatRiwayat(false);
   }
 
   const judul = <PageHeader title="Monitoring Perangkat" subtitle="Posisi dan status satu perangkat" />;
@@ -123,9 +143,15 @@ export default function MonitoringDetailPage() {
   const titik = koordinat(perangkat.lat_terakhir, perangkat.long_terakhir);
   const adaPosisi = perangkat.lat_terakhir != null && perangkat.long_terakhir != null;
 
-  const jalur = riwayat
-    ? [...riwayat].reverse().map((t) => ({ lat: t.latitude, lng: t.longitude }))
-    : undefined;
+  // Zona yayasan selalu tampil; lingkaran kedua muncul bila perangkat ini punya zona khusus.
+  const lingkaranZona = [zona.find((z) => z.id_perangkat === null), zona.find((z) => z.id_perangkat === id)]
+    .filter((z): z is Geofence => !!z)
+    .map((z) => ({ lat: Number(z.center_lat), lng: Number(z.center_long), radius: z.radius_meter, khusus: z.id_perangkat !== null }));
+
+  const titikHenti =
+    riwayatTerbuka && riwayat
+      ? riwayat.map((t, i) => ({ lat: t.latitude, lng: t.longitude, nomor: i + 1, jam: jamWIB(t.recorded_at) }))
+      : undefined;
 
   return (
     <>
@@ -173,7 +199,8 @@ export default function MonitoringDetailPage() {
                       sos: perangkat.status_sos,
                     },
                   ]}
-                  path={jalur}
+                  titikHenti={titikHenti}
+                  zona={lingkaranZona}
                 />
 
                 {!perangkat.status_online && (
@@ -195,8 +222,8 @@ export default function MonitoringDetailPage() {
             )}
           </section>
 
-          <div className="flex flex-col gap-4">
-            <section className="rounded-card border-2 border-border bg-surface px-5 py-[18px]">
+          <div className="flex flex-col gap-4 lg:h-[520px]">
+            <section className="shrink-0 rounded-card border-2 border-border bg-surface px-5 py-[18px]">
               <div className="mb-3.5 flex items-center gap-3">
                 <span className="flex h-10 w-10 flex-none items-center justify-center rounded-pill bg-tile-blue text-[13px] font-extrabold text-primary">
                   {inisialNama(namaTampil)}
@@ -235,34 +262,73 @@ export default function MonitoringDetailPage() {
               </dl>
             </section>
 
-            <section className="rounded-card border-2 border-border bg-surface px-5 py-[18px]">
+            <section className="flex min-h-0 flex-col rounded-card border-2 border-border bg-surface px-5 py-[18px] lg:flex-1">
               <button
-                onClick={muatRiwayat}
+                onClick={toggleRiwayat}
                 disabled={memuatRiwayat}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-input bg-surface px-5 text-sm font-bold text-text-primary shadow-[inset_0_0_0_2px_var(--color-border)] transition-colors hover:bg-surface-sunken disabled:opacity-50"
+                aria-expanded={riwayatTerbuka}
+                aria-controls="daftar-riwayat"
+                className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-input bg-surface px-5 text-sm font-bold text-text-primary shadow-[inset_0_0_0_2px_var(--color-border)] transition-colors hover:bg-surface-sunken disabled:opacity-50"
               >
                 <Route size={18} strokeWidth={2.2} />
-                {memuatRiwayat ? "Memuat riwayat…" : riwayat ? "Muat ulang riwayat" : "Lihat riwayat perjalanan"}
+                {memuatRiwayat ? "Memuat riwayat…" : riwayatTerbuka ? "Tutup riwayat perjalanan" : "Lihat riwayat perjalanan"}
+                <ChevronDown
+                  size={18}
+                  strokeWidth={2.2}
+                  className={`transition-transform ${riwayatTerbuka ? "rotate-180" : ""}`}
+                />
               </button>
 
-              {galatRiwayat && (
-                <p role="alert" className="mt-3 rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger-text">
-                  {galatRiwayat}
+              {riwayat && !riwayatTerbuka && (
+                <p className="mt-3 text-[13px] leading-5 text-text-secondary">
+                  {riwayat.length === 0 ? (
+                    "Belum ada titik henti hari ini."
+                  ) : (
+                    <>
+                      <span className="angka font-bold text-text-primary">{riwayat.length}</span> titik henti hari
+                      ini. Riwayat direset setiap pukul 00.00 WIB.
+                    </>
+                  )}
                 </p>
               )}
 
-              {riwayat && riwayat.length === 0 && (
-                <p className="mt-3 text-[13px] leading-5 text-text-secondary">
-                  Belum ada titik perjalanan yang tersimpan untuk perangkat ini.
-                </p>
-              )}
+              {riwayatTerbuka && !memuatRiwayat && (
+                <div id="daftar-riwayat" className="mt-3 flex min-h-0 flex-1 flex-col">
+                  {galatRiwayat ? (
+                    <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger-text">
+                      {galatRiwayat}
+                    </p>
+                  ) : riwayat && riwayat.length === 0 ? (
+                    <p className="text-[13px] leading-5 text-text-secondary">
+                      Titik dicatat saat tongkat diam sekitar 2 menit di satu tempat.
+                    </p>
+                  ) : riwayat ? (
+                    <>
+                      <p className="text-[13px] leading-5 text-text-secondary">
+                        Bernomor sama dengan titik di peta.
+                      </p>
 
-              {riwayat && riwayat.length > 0 && (
-                <p className="mt-3 text-[13px] leading-5 text-text-secondary">
-                  <span className="angka">{riwayat.length}</span> titik tergambar di peta, dari{" "}
-                  {jamWIB(riwayat[riwayat.length - 1].recorded_at)} sampai {jamWIB(riwayat[0].recorded_at)}.
-                  {riwayat.length === 200 && " Hanya 200 titik terbaru yang ditampilkan."}
-                </p>
+                      <ol className="mt-3 flex max-h-[280px] min-h-0 flex-col overflow-y-auto border-t-2 border-border lg:max-h-none lg:flex-1">
+                        {riwayat.map((t, i) => (
+                          <li
+                            key={t.id_tracking}
+                            className="flex shrink-0 items-start gap-3 border-b-2 border-border py-2.5 text-[13px] leading-5"
+                          >
+                            <span className="angka flex h-6 w-6 flex-none items-center justify-center rounded-pill bg-live text-[11px] font-bold text-white">
+                              {i + 1}
+                            </span>
+                            <span className="min-w-0">
+                              <b className="block font-semibold">Berhenti pukul {jamWIB(t.recorded_at)}</b>
+                              <span className="data block text-text-secondary">
+                                {koordinat(t.latitude, t.longitude)}
+                              </span>
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </>
+                  ) : null}
+                </div>
               )}
             </section>
           </div>
