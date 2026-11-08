@@ -1,6 +1,6 @@
 // backend/src/routes/geofence.routes.ts
 
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { requireAuth, requireAktif, requireRole, getSession, db } from "../lib/auth";
 import { balasGalat } from "../lib/galat";
 
@@ -41,43 +41,49 @@ function nilaiZona(body: Record<string, unknown>) {
 }
 
 router.get("/", async (req, res) => {
-  const { data, error } = await db(req).from("geofence").select(KOLOM).eq("is_active", true);
+  const { data, error } = await db(req).from("geofence").select(KOLOM).eq("is_active", true).order("id_geofence");
   if (error) return balasGalat(res, "GEOFENCE daftar", error);
   res.json(data);
 });
 
-router.put("/yayasan", requireRole("ADMINISTRATOR"), async (req, res) => {
+// Simpan zona: ubah baris yang sudah ada, atau buat baru bila belum ada.
+// Sengaja tanpa upsert agar tidak bergantung pada bentuk unique index di database.
+async function simpanZona(req: Request, res: Response, idPerangkat: string | null, konteks: string) {
   const salah = periksaIsian(req.body);
   if (salah) return res.status(400).json({ message: salah });
 
   const { id_yayasan } = getSession(req);
-  const { data, error } = await db(req)
-    .from("geofence")
-    .upsert({ id_yayasan, id_perangkat: null, is_active: true, ...nilaiZona(req.body) }, { onConflict: "id_yayasan" })
-    .select(KOLOM)
-    .single();
+  const isian = { is_active: true, ...nilaiZona(req.body) };
 
-  if (error) return balasGalat(res, "GEOFENCE simpan zona yayasan", error);
+  const cari = db(req).from("geofence").select("id_geofence");
+  const { data: ada, error: galatCari } = await (
+    idPerangkat === null ? cari.is("id_perangkat", null) : cari.eq("id_perangkat", idPerangkat)
+  )
+    .order("id_geofence")
+    .limit(1)
+    .maybeSingle();
+
+  if (galatCari) return balasGalat(res, `${konteks} (cari)`, galatCari);
+
+  const { data, error } = ada
+    ? await db(req).from("geofence").update(isian).eq("id_geofence", ada.id_geofence).select(KOLOM).single()
+    : await db(req)
+        .from("geofence")
+        .insert({ id_yayasan, id_perangkat: idPerangkat, ...isian })
+        .select(KOLOM)
+        .single();
+
+  if (error) return balasGalat(res, konteks, error);
   res.json(data);
-});
+}
 
-router.put("/:id_perangkat", requireRole("ADMINISTRATOR"), async (req, res) => {
-  const salah = periksaIsian(req.body);
-  if (salah) return res.status(400).json({ message: salah });
+router.put("/yayasan", requireRole("ADMINISTRATOR"), (req, res) =>
+  simpanZona(req, res, null, "GEOFENCE simpan zona yayasan")
+);
 
-  const { id_yayasan } = getSession(req);
-  const { data, error } = await db(req)
-    .from("geofence")
-    .upsert(
-      { id_yayasan, id_perangkat: req.params.id_perangkat, is_active: true, ...nilaiZona(req.body) },
-      { onConflict: "id_perangkat" }
-    )
-    .select(KOLOM)
-    .single();
-
-  if (error) return balasGalat(res, "GEOFENCE simpan zona perangkat", error);
-  res.json(data);
-});
+router.put("/:id_perangkat", requireRole("ADMINISTRATOR"), (req, res) =>
+  simpanZona(req, res, String(req.params.id_perangkat), "GEOFENCE simpan zona perangkat")
+);
 
 router.delete("/yayasan", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { error, count } = await db(req)

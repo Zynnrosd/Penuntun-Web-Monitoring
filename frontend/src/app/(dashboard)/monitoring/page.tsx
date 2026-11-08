@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { inisialNama } from "@/hooks/useSession";
 import { koordinat, waktuRelatif } from "@/lib/format";
-import type { Perangkat } from "@/types";
+import type { Perangkat, Geofence } from "@/types";
 
 const MapView = dynamic(() => import("@/components/map/MapView").then((m) => m.MapView), { ssr: false });
 
@@ -52,6 +52,7 @@ function Lencana({ p }: { p: Perangkat }) {
 
 export default function MonitoringPage() {
   const [perangkat, setPerangkat] = useState<Perangkat[]>([]);
+  const [zona, setZona] = useState<Geofence[]>([]);
   const [memuat, setMemuat] = useState(true);
   const [galat, setGalat] = useState("");
 
@@ -60,10 +61,13 @@ export default function MonitoringPage() {
   const [idPilih, setIdPilih] = useState<string | null>(null);
 
   const muat = useCallback(() => {
-    api
-      .get<Perangkat[]>("/perangkat")
-      .then((data) => {
+    Promise.all([
+      api.get<Perangkat[]>("/perangkat"),
+      api.get<Geofence[]>("/geofence").catch(() => [] as Geofence[]),
+    ])
+      .then(([data, zonaAman]) => {
         setPerangkat(data);
+        setZona(zonaAman);
         setGalat("");
       })
       .catch((e) => setGalat(e instanceof Error ? e.message : "Gagal memuat data"))
@@ -141,11 +145,18 @@ export default function MonitoringPage() {
   const pilih = perangkat.find((p) => p.id_perangkat === idPilih) ?? null;
   const adaYangOffline = jumlah.offline > 0;
 
+  // Zona yayasan selalu tampil; lingkaran kedua muncul bila perangkat terpilih punya zona khusus.
+  const zonaYayasan = zona.find((z) => z.id_perangkat === null);
+  const zonaKhusus = idPilih ? zona.find((z) => z.id_perangkat === idPilih) : undefined;
+  const lingkaranZona = [zonaYayasan, zonaKhusus]
+    .filter((z): z is Geofence => !!z)
+    .map((z) => ({ lat: Number(z.center_lat), lng: Number(z.center_long), radius: z.radius_meter, khusus: z.id_perangkat !== null }));
+
   return (
     <>
       {judul}
 
-      <div className="grid items-stretch gap-5 lg:h-[620px] lg:grid-cols-[352px_minmax(0,1fr)]">
+      <div className="grid items-stretch gap-5 lg:h-[calc(100vh-140px)] lg:min-h-[480px] lg:grid-cols-[352px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
         <aside
           className="flex min-h-0 flex-col gap-3.5 rounded-card border-2 border-border bg-surface p-5"
           aria-label="Daftar perangkat"
@@ -272,6 +283,7 @@ export default function MonitoringPage() {
                   online: p.status_online,
                   sos: p.status_sos,
                 }))}
+                zona={lingkaranZona}
               />
 
               {adaYangOffline && (

@@ -4,7 +4,8 @@
 import mqtt, { MqttClient } from "mqtt";
 
 import { supabase } from "../lib/supabase";
-import { isDiLuarZonaAman } from "../services/geofencing.service";
+import { hitungJarakMeter, isDiLuarZonaAman } from "../services/geofencing.service";
+import { awalHariIniWIB } from "../lib/waktu";
 import { buatNotifikasiDarurat } from "../services/notifikasi.service";
 import { env } from "../config/env";
 
@@ -63,12 +64,20 @@ const TOPIC_STATUS = "penuntun/status/#";
 const TOPIC_SOS = "penuntun/sos/#";
 const TOPIC_POWER = "penuntun/power/#";
 
-// Titik riwayat disimpan paling cepat sekali setiap 5 menit per perangkat.
-// Lokasi terakhir di tabel perangkat tetap diperbarui setiap pesan GPS (~10 detik).
-const TRACKING_INTERVAL_MS = 5 * 60 * 1000;
+// Titik henti: tongkat diam minimal 2 menit dalam radius 20 m
+// (GPS NEO-6M bisa bergeser beberapa meter walau diam).
+const RADIUS_DIAM_METER = 20;
+const DURASI_DIAM_MS = 2 * 60 * 1000;
+const JEDA_GPS_MAKS_MS = 60 * 1000;
 
-// Hindari dua pesan GPS bersamaan menciptakan dua baris riwayat.
-const trackingSedangDiproses = new Set<string>();
+type PosisiDiam = {
+  lat: number;
+  lon: number;
+  sejak: number;
+  terakhirDiterima: number;
+  tercatat: boolean;
+};
+const posisiDiam = new Map<string, PosisiDiam>();
 
 // Hindari notifikasi geofence setiap 10 detik saat GPS berada
 // di luar zona aman. Berlaku per perangkat selama backend hidup.
@@ -205,6 +214,71 @@ async function prosesHeartbeat(data: HeartbeatPayload): Promise<void> {
 }
 
 // =========================================================
+// SIMPAN TITIK HENTI
+// =========================================================
+
+async function simpanTitikHenti(
+  id_perangkat: string,
+  id_yayasan: string,
+  diam: PosisiDiam,
+  baterai?: number
+): Promise<boolean> {
+  const awalHari = awalHariIniWIB();
+
+  // Cegah titik ganda di tempat yang sama setelah backend restart.
+  const { data: terakhir, error: cekError } = await supabase
+    .from("tracking_data")
+    .select("latitude, longitude")
+    .eq("id_perangkat", id_perangkat)
+    .gte("recorded_at", awalHari)
+    .order("recorded_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (cekError) {
+    console.error(`[GPS] Gagal mengecek titik henti ${id_perangkat}:`, cekError.message);
+    return false;
+  }
+
+  if (
+    terakhir &&
+    hitungJarakMeter(terakhir.latitude, terakhir.longitude, diam.lat, diam.lon) <=
+      RADIUS_DIAM_METER
+  ) {
+    return true;
+  }
+
+  const { error: insertError } = await supabase.from("tracking_data").insert({
+    id_perangkat,
+    id_yayasan,
+    latitude: diam.lat,
+    longitude: diam.lon,
+    recorded_at: new Date(Math.max(diam.sejak, Date.parse(awalHari))).toISOString(),
+    ...(baterai !== undefined ? { baterai } : {}),
+  });
+
+  if (insertError) {
+    console.error(`[GPS] Gagal menyimpan titik henti ${id_perangkat}:`, insertError.message);
+    return false;
+  }
+
+  console.log(`[GPS] Titik henti ${id_perangkat} disimpan.`);
+
+  // Reset harian: hapus titik sebelum 00.00 WIB.
+  const { error: hapusError } = await supabase
+    .from("tracking_data")
+    .delete()
+    .eq("id_perangkat", id_perangkat)
+    .lt("recorded_at", awalHari);
+
+  if (hapusError) {
+    console.error(`[GPS] Gagal menghapus riwayat lama ${id_perangkat}:`, hapusError.message);
+  }
+
+  return true;
+}
+
+// =========================================================
 // PROSES TELEMETRY GPS
 // =========================================================
 
@@ -249,80 +323,37 @@ async function prosesTelemetry(data: TelemetryPayload): Promise<void> {
 
   console.log(`[MQTT] Lokasi ${id_perangkat} berhasil diperbarui.`);
 
-  // =====================================================
-  // SIMPAN RIWAYAT PERJALANAN MAKSIMAL 1X PER 5 MENIT
-  // =====================================================
-  // Cek recorded_at terakhir di Supabase agar interval
-  // tetap benar bahkan setelah backend di-restart.
-  // GPS terbaru selalu di-update ke tabel "perangkat" di atas.
+  // Catat titik henti: pindah > 20 m atau GPS terputus = hitungan diam diulang.
+  const sekarangMs = Date.now();
+  const diam = posisiDiam.get(id_perangkat);
 
-  if (!trackingSedangDiproses.has(id_perangkat)) {
-    trackingSedangDiproses.add(id_perangkat);
+  const mulaiUlang =
+    !diam ||
+    sekarangMs - diam.terakhirDiterima > JEDA_GPS_MAKS_MS ||
+    hitungJarakMeter(diam.lat, diam.lon, latitude, longitude) > RADIUS_DIAM_METER;
 
-    try {
-      const { data: trackingTerakhir, error: cekTrackingError } =
-        await supabase
-          .from("tracking_data")
-          .select("recorded_at")
-          .eq("id_perangkat", id_perangkat)
-          .order("recorded_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+  if (mulaiUlang) {
+    posisiDiam.set(id_perangkat, {
+      lat: latitude,
+      lon: longitude,
+      sejak: sekarangMs,
+      terakhirDiterima: sekarangMs,
+      tercatat: false,
+    });
+  } else {
+    diam.terakhirDiterima = sekarangMs;
+  }
 
-      if (cekTrackingError) {
-        console.error(
-          `[GPS] Gagal mengecek riwayat ${id_perangkat}:`,
-          cekTrackingError.message
-        );
-      } else {
-        const sekarang = Date.now();
-        const waktuTerakhir = trackingTerakhir
-          ? Date.parse(trackingTerakhir.recorded_at)
-          : null;
-
-        if (waktuTerakhir !== null && !Number.isFinite(waktuTerakhir)) {
-          console.error(
-            `[GPS] recorded_at terakhir tidak valid untuk ${id_perangkat}. ` +
-            "Penyimpanan dilewati agar tidak membuat data ganda."
-          );
-        } else if (
-          waktuTerakhir === null ||
-          sekarang - waktuTerakhir >= TRACKING_INTERVAL_MS
-        ) {
-          // GPS NEO-6M tidak menyertakan baterai. Jika tidak
-          // ada nilainya, jangan mengirim angka baterai palsu.
-          const dataTracking = {
-            id_perangkat,
-            id_yayasan: perangkat.id_yayasan,
-            latitude,
-            longitude,
-            ...(typeof baterai === "number" ? { baterai } : {}),
-          };
-
-          const { error: trackingError } = await supabase
-            .from("tracking_data")
-            .insert(dataTracking);
-
-          if (trackingError) {
-            console.error(
-              `[GPS] Gagal menyimpan riwayat ${id_perangkat}:`,
-              trackingError.message
-            );
-          } else {
-            console.log(
-              `[GPS] Riwayat perjalanan ${id_perangkat} disimpan (interval 5 menit).`
-            );
-          }
-        }
-      }
-    } catch (error) {
-      console.error(
-        `[GPS] Error memproses riwayat ${id_perangkat}:`,
-        error
-      );
-    } finally {
-      trackingSedangDiproses.delete(id_perangkat);
-    }
+  if (diam && !mulaiUlang && !diam.tercatat && sekarangMs - diam.sejak >= DURASI_DIAM_MS) {
+    // Ditandai sebelum await agar tidak tersimpan dua kali.
+    diam.tercatat = true;
+    const tersimpan = await simpanTitikHenti(
+      id_perangkat,
+      perangkat.id_yayasan,
+      diam,
+      typeof baterai === "number" ? baterai : undefined
+    );
+    if (!tersimpan) diam.tercatat = false;
   }
 
   // Zona perangkat menang atas zona bawaan yayasan (id_perangkat null).

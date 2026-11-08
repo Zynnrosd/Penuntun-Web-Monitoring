@@ -4,9 +4,9 @@ import L from "leaflet";
 
 const markerIcon = new L.DivIcon({
   className: "",
-  html: `<div style="width:16px;height:16px;border-radius:50%;background:#1B3A5C;border:3px solid white;box-shadow:0 0 0 2px #1B3A5C55"></div>`,
-  iconSize: [16, 16],
-  iconAnchor: [8, 8],
+  html: `<div style="width:24px;height:24px;border-radius:50%;background:#1B3A5C;border:4px solid white;box-shadow:0 0 0 2px #1B3A5C55;cursor:grab"></div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
 });
 
 function KlikHandler({ onPick }: { onPick: (lat: number, lng: number) => void }) {
@@ -35,7 +35,17 @@ export function GeofenceMapPicker({
       <KlikHandler onPick={onPick} />
       {center && (
         <>
-          <Marker position={[center.lat, center.lng]} icon={markerIcon} />
+          <Marker
+            position={[center.lat, center.lng]}
+            icon={markerIcon}
+            draggable
+            eventHandlers={{
+              dragend(e: L.LeafletEvent) {
+                const { lat, lng } = (e.target as L.Marker).getLatLng();
+                onPick(lat, lng);
+              },
+            }}
+          />
           <Circle
             center={[center.lat, center.lng]}
             radius={radius}

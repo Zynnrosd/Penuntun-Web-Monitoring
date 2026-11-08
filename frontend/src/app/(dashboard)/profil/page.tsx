@@ -167,7 +167,7 @@ export default function ProfilPage() {
     <>
       {judul}
 
-      <div className="grid items-start gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2">
         <section className="flex flex-col gap-4 rounded-card border-2 border-border bg-surface p-6">
           <h2 className="text-[22px] font-extrabold leading-7">Data akun</h2>
 
@@ -195,7 +195,7 @@ export default function ProfilPage() {
             </Button>
           </form>
 
-          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 border-t border-border pt-4 text-sm leading-5">
+          <dl className="mt-auto grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 border-t border-border pt-4 text-sm leading-5">
             <dt className="text-text-secondary">Peran</dt>
             <dd className="text-right font-bold">
               {profil.role === "ADMINISTRATOR" ? "Administrator" : "Pengawas"}
@@ -209,7 +209,7 @@ export default function ProfilPage() {
         </section>
 
         <div className="flex flex-col gap-5">
-          <section className="flex flex-col gap-3.5 rounded-card border-2 border-border bg-surface p-6">
+          <section className="flex flex-1 flex-col gap-3.5 rounded-card border-2 border-border bg-surface p-6">
             <h2 className="text-[22px] font-extrabold leading-7">Nomor WhatsApp saya</h2>
             <p className="text-sm leading-5 text-text-secondary">
               Pesan SOS dikirim ke nomor ini. Kosongkan jika Anda tidak ingin menerima pesan.
@@ -235,7 +235,7 @@ export default function ProfilPage() {
             </form>
           </section>
 
-          <section className="flex flex-col gap-3.5 rounded-card border-2 border-border bg-surface p-6">
+          <section className="flex flex-1 flex-col gap-3.5 rounded-card border-2 border-border bg-surface p-6">
             <h2 className="text-[22px] font-extrabold leading-7">Ganti kata sandi</h2>
 
             <form onSubmit={gantiSandi} className="flex flex-col gap-3.5">
