@@ -11,7 +11,8 @@ import { KonfirmasiKeluar } from "@/components/ui/KonfirmasiKeluar";
 import { api } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 
-const HANYA_ADMINISTRATOR = ["/perangkat", "/pengguna", "/pengawas"];
+// /perangkat tidak termasuk: Pengawas memasangkan tongkat di sana. Tambah, hapus, dan zona aman dibatasi di dalam halamannya.
+const HANYA_ADMINISTRATOR = ["/pengguna", "/pengawas"];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -135,8 +136,8 @@ function AksesDitolak() {
         <ShieldOff size={40} strokeWidth={2} className="mx-auto mb-4 text-offline" />
         <h2 className="text-[22px] font-extrabold leading-8">Halaman ini untuk Administrator</h2>
         <p className="mt-2 text-[15px] leading-6 text-text-secondary">
-          Akun Pengawas dapat memantau lokasi, baterai, dan menangani notifikasi SOS, tetapi tidak mengelola data
-          perangkat maupun pengguna.
+          Akun Pengawas dapat memantau lokasi, baterai, menangani notifikasi SOS, dan memasangkan tongkat, tetapi
+          tidak mengelola data pengguna maupun akun Pengawas.
         </p>
       </div>
     </div>

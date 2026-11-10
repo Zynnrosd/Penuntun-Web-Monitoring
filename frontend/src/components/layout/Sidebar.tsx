@@ -14,8 +14,10 @@ const MENU_UMUM = [
   { href: "/notifikasi", label: "Notifikasi SOS", icon: Siren },
 ];
 
+const DATA_PERANGKAT = { href: "/perangkat", label: "Data perangkat", icon: Smartphone };
+
 const MENU_MANAJEMEN = [
-  { href: "/perangkat", label: "Data perangkat", icon: Smartphone },
+  DATA_PERANGKAT,
   { href: "/pengguna", label: "Data pengguna", icon: Users },
   { href: "/pengawas", label: "Akun Pengawas", icon: ShieldCheck },
 ];
@@ -32,6 +34,9 @@ export function Sidebar({
   onKeluar: () => void;
 }) {
   const pathname = usePathname();
+
+  // Pengawas memasangkan tongkat lewat halaman Data perangkat, jadi menunya ikut tampil tanpa kelompok Manajemen.
+  const menuUtama = isAdmin ? MENU_UMUM : [...MENU_UMUM, DATA_PERANGKAT];
 
   function kelas(href: string) {
     const aktif = pathname === href || pathname.startsWith(`${href}/`);
@@ -52,7 +57,7 @@ export function Sidebar({
       </Link>
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Navigasi utama">
-        {MENU_UMUM.map(({ href, label, icon: Icon }) => (
+        {menuUtama.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} onClick={onNavigate} className={kelas(href)}>
             <Icon size={18} strokeWidth={2} />
             {label}
