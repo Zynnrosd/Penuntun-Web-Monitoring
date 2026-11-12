@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
@@ -10,11 +11,18 @@ const markerIcon = new L.DivIcon({
 });
 
 function KlikHandler({ onPick }: { onPick: (lat: number, lng: number) => void }) {
-  useMapEvents({
+  const map = useMapEvents({
     click(e) {
       onPick(e.latlng.lat, e.latlng.lng);
     },
   });
+
+  useEffect(() => {
+    return () => {
+      (map as L.Map & { _animatingZoom?: boolean })._animatingZoom = false;
+    };
+  }, [map]);
+
   return null;
 }
 

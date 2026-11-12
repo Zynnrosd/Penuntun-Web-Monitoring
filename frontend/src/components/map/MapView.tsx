@@ -23,10 +23,10 @@ function pinIcon(color: string) {
 
 // Salinan token globals.css (Leaflet tidak bisa membaca token Tailwind).
 const WARNA = {
-  online: "#07874B", // --color-success
-  offline: "#5B77A6", // --color-offline
-  sos: "#D4343F", // --color-danger
-  rute: "#008290", // --color-live
+  online: "#07874B",
+  offline: "#5B77A6",
+  sos: "#D4343F",
+  rute: "#008290",
 };
 
 const iconOnline = pinIcon(WARNA.online);
@@ -60,9 +60,7 @@ export type TitikHenti = { lat: number; lng: number; nomor: number; jam: string 
 
 export type ZonaAman = { lat: number; lng: number; radius: number; khusus?: boolean };
 
-// Menghitung ulang ukuran peta (mencegah tampilan kotak-kotak) lalu mengarahkan
-// tampilan ke marker dan titik henti. Hanya berjalan saat koordinat benar-benar berubah,
-// supaya zoom atau geseran pengguna tidak ditarik balik oleh render ulang halaman.
+// Menghitung ulang ukuran peta (mencegah tampilan kotak-kotak) lalu mengarahkan tampilan ke marker dan titik henti. Hanya berjalan saat koordinat benar-benar berubah, supaya zoom atau geseran pengguna tidak ditarik balik oleh render ulang halaman.
 function MapController({ markers, titikHenti }: { markers: MarkerData[]; titikHenti?: TitikHenti[] }) {
   const map = useMap();
 
@@ -91,8 +89,13 @@ function MapController({ markers, titikHenti }: { markers: MarkerData[]; titikHe
     }, 250);
 
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, kunci]);
+
+  useEffect(() => {
+    return () => {
+      (map as L.Map & { _animatingZoom?: boolean })._animatingZoom = false;
+    };
+  }, [map]);
 
   return null;
 }
