@@ -199,7 +199,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="mt-6 max-w-md text-[18px] font-medium leading-7 text-text-secondary">
-              Dashboard untuk keluarga dan yayasan memantau lokasi, baterai, dan SOS secara langsung.
+              Dashboard bagi pengurus yayasan untuk memantau lokasi, baterai, dan SOS secara langsung.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
@@ -361,7 +361,7 @@ export default function LandingPage() {
           <div>
             <Logo variant="putih" tinggi={28} />
             <p className="mt-3 max-w-[240px] text-sm leading-[22px] text-white/60">
-              Dashboard pemantauan tongkat pintar untuk keluarga dan yayasan.
+              Dashboard pemantauan tongkat pintar untuk pengurus yayasan.
             </p>
           </div>
 

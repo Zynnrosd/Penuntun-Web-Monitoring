@@ -139,8 +139,8 @@ export default function PenggunaPage() {
               Tidak ada nama yang cocok dengan &ldquo;{cari.trim()}&rdquo;.
             </p>
           ) : (
-            <div className="max-h-[max(260px,calc(100vh-340px))] overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-secondary-soft">
-              <table className="w-full">
+            <div className="md:max-h-[max(260px,calc(100vh-340px))] overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-secondary-soft">
+              <table className="tabel-kartu w-full">
                 <thead>
                   <tr className="bg-secondary-soft text-left text-[13px] font-bold uppercase tracking-[0.06em] text-[#3F5B82]">
                     <th scope="col" className="px-5 py-2.5">Pengguna</th>
@@ -169,17 +169,17 @@ export default function PenggunaPage() {
                         </div>
                       </td>
 
-                      <td className="data px-5 py-2.5 text-[13px]">
+                      <td data-label="Perangkat" className="data px-5 py-2.5 text-[13px]">
                         {perangkatPengguna(u.id_tunanetra) ?? (
                           <span className="font-sans text-text-secondary">Belum dipasangkan</span>
                         )}
                       </td>
 
-                      <td className="px-5 py-2.5 text-sm">
+                      <td data-label="Alamat" className="px-5 py-2.5 text-sm">
                         {u.alamat ?? <span className="text-text-secondary">—</span>}
                       </td>
 
-                      <td className="px-5 py-2.5 text-sm">
+                      <td data-label="Terdaftar" className="px-5 py-2.5 text-sm">
                         {new Date(u.created_at).toLocaleDateString("id-ID", {
                           day: "numeric",
                           month: "short",
@@ -187,7 +187,7 @@ export default function PenggunaPage() {
                         })}
                       </td>
 
-                      <td className="px-5 py-2.5">
+                      <td data-label="Aksi" className="px-5 py-2.5">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() =>

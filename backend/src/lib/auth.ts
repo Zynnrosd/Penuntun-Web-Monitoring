@@ -1,4 +1,5 @@
 // backend/src/lib/auth.ts
+// Middleware keamanan: cek login, cek status akun Aktif, dan cek peran. Semua data dibaca atas nama pengguna agar RLS Supabase berlaku.
 
 import { Request, Response, NextFunction } from "express";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -19,6 +20,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ message: "Belum login" });
 
+  // Klien Supabase atas nama pengguna ini, jadi RLS membatasi data ke yayasannya sendiri.
   const klien = supabaseSebagai(token);
 
   const { data: auth, error: authError } = await klien.auth.getUser(token);
@@ -49,6 +51,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   next();
 }
 
+// Akun Menunggu, Ditolak, dan Nonaktif tidak boleh memakai fitur dashboard.
 export function requireAktif(req: Request, res: Response, next: NextFunction) {
   const { status } = getSession(req);
   if (status !== "AKTIF") {

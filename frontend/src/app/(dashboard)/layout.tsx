@@ -65,6 +65,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const isAdmin = sesi.role === "ADMINISTRATOR";
+  // Pengawas yang membuka halaman khusus Administrator lewat alamat mendapat pesan akses ditolak.
+  // Ini hanya tampilan; backend tetap menolak permintaannya.
   const tanpaIzin = !isAdmin && HANYA_ADMINISTRATOR.some((p) => pathname.startsWith(p));
 
   return (

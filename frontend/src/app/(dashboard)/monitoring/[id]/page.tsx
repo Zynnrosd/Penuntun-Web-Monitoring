@@ -56,8 +56,10 @@ export default function MonitoringDetailPage() {
   useEffect(muat, [muat]);
   useRealtimeTable("perangkat", muat);
 
+  // Bila realtime putus, label "Live" tidak ditampilkan agar data lama tidak terlihat seperti data terbaru.
   const koneksiPutus = useRealtimePutus();
 
+  // Riwayat perjalanan: titik henti hari ini sejak pukul 00.00 WIB.
   const muatRiwayat = useCallback(
     () =>
       api
@@ -176,7 +178,9 @@ export default function MonitoringDetailPage() {
               <i className="h-2 w-2 rounded-pill bg-offline" />
               {perangkat.status_online
                 ? `Koneksi live terputus · data terakhir ${waktuRelatif(perangkat.last_active)}`
-                : `Offline · terakhir terlihat ${waktuRelatif(perangkat.last_active)}`}
+                : perangkat.last_active
+                  ? `Offline · terakhir terlihat ${waktuRelatif(perangkat.last_active)}`
+                  : "Offline · belum pernah terhubung"}
             </span>
           )}
         </div>

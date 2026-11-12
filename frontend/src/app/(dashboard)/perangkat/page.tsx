@@ -14,6 +14,7 @@ import { Modal } from "@/components/ui/Modal";
 import { waktuRelatif } from "@/lib/format";
 import type { Perangkat, PenggunaTunanetra, Geofence } from "@/types";
 
+// Peta hanya dimuat di browser, karena Leaflet membutuhkan objek window.
 const PetaZona = dynamic(() => import("@/components/map/GeofenceMapPicker").then((m) => m.GeofenceMapPicker), {
   ssr: false,
   loading: () => <div className="h-full w-full rounded-map bg-surface-sunken" />,
@@ -73,6 +74,7 @@ export default function PerangkatPage() {
 
   useEffect(muat, [muat]);
 
+  // Waktu pemasangan terakhir ikut dikirim agar server menolak bila akun lain sudah mengubahnya lebih dulu.
   async function pasangkan(p: Perangkat, idPengguna: string) {
     setGalatAksi("");
     try {
@@ -242,8 +244,8 @@ export default function PerangkatPage() {
                     : "Belum ada tongkat terdaftar. Hubungi Administrator yayasan untuk mendaftarkan perangkat."}
                 </p>
               ) : (
-                <div className="max-h-[max(260px,calc(100vh-340px))] overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-secondary-soft">
-                  <table className="w-full">
+                <div className="md:max-h-[max(260px,calc(100vh-340px))] overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-secondary-soft">
+                  <table className="tabel-kartu w-full">
                     <thead>
                       <tr className="bg-secondary-soft text-left text-[13px] font-bold uppercase tracking-[0.06em] text-[#3F5B82]">
                         <th scope="col" className="px-5 py-2.5">Perangkat</th>
@@ -269,7 +271,7 @@ export default function PerangkatPage() {
                             </div>
                           </td>
 
-                          <td className="px-5 py-2.5">
+                          <td data-label="Pemakai saat ini" className="px-5 py-2.5">
                             <select
                               value={p.dipakai_oleh ?? ""}
                               onChange={(e) => pasangkan(p, e.target.value)}
@@ -285,17 +287,17 @@ export default function PerangkatPage() {
                             </select>
                           </td>
 
-                          <td className="px-5 py-2.5">
+                          <td data-label="Status" className="px-5 py-2.5">
                             <StatusPill
                               status={p.status_online ? "online" : "offline"}
                               label={p.status_online ? "Online" : "Offline"}
                             />
                           </td>
 
-                          <td className="px-5 py-2.5 text-sm">{waktuRelatif(p.last_active)}</td>
+                          <td data-label="Terakhir terlihat" className="px-5 py-2.5 text-sm">{waktuRelatif(p.last_active)}</td>
 
                           {isAdmin && (
-                            <td className="px-5 py-2.5">
+                            <td data-label="Aksi" className="px-5 py-2.5">
                               <div className="flex justify-end">
                                 <button
                                   onClick={() => setHapus(p)}

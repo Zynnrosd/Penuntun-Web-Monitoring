@@ -56,6 +56,7 @@ router.delete("/:id", requireRole("ADMINISTRATOR"), async (req, res) => {
     .delete({ count: "exact" })
     .eq("id_tunanetra", req.params.id);
 
+  // Pengguna yang masih memegang tongkat ditolak oleh relasi di database.
   if (error?.code === "23503") {
     return res.status(409).json({
       message: "Pengguna masih terpasang di sebuah perangkat. Lepas pemasangannya dahulu.",

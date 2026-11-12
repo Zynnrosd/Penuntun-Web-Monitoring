@@ -70,6 +70,7 @@ router.patch("/:id/pulihkan", requireRole("ADMINISTRATOR"), async (req, res) => 
   res.json({ message: "Insiden dipulihkan" });
 });
 
+// Penanganan insiden. Aturan siapa yang boleh dan pesan bentrok ada di fungsi database.
 router.patch("/:id/tangani", async (req, res) => {
   const { data, error } = await db(req).rpc("tangani_insiden", { p_id: Number(req.params.id) });
   if (error) return balasGalatRpc(res, "NOTIFIKASI tangani", error);
@@ -88,6 +89,7 @@ router.patch("/:id/selesai", async (req, res) => {
   res.json(data);
 });
 
+// Hanya menjadwalkan ulang. Pesannya dikirim oleh pengirim WhatsApp di whatsapp.service.ts.
 router.post("/delivery/:id/kirim-ulang", async (req, res) => {
   const { data, error } = await db(req).rpc("kirim_ulang_delivery", { p_id: Number(req.params.id) });
   if (error) return balasGalatRpc(res, "NOTIFIKASI kirim ulang", error);

@@ -73,6 +73,7 @@ type BarisPending = {
   admin: { no_wa: string | null } | null;
 };
 
+// Mencegah dua putaran pengiriman berjalan bersamaan.
 let sedangMengirim = false;
 let timer: NodeJS.Timeout | null = null;
 

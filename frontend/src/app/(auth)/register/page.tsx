@@ -48,6 +48,7 @@ export default function RegisterPage() {
 
     setMengirim(true);
     try {
+      // Pendaftaran lewat backend, karena backend yang membuat akun dan menerapkan batas percobaan.
       const res = await api.post<{ message: string }>("/auth/register", {
         alur,
         nama,

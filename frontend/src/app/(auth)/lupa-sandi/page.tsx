@@ -18,6 +18,7 @@ export default function LupaSandiPage() {
     e.preventDefault();
     setMengirim(true);
 
+    // Pesan berhasil selalu sama, terdaftar atau tidak, agar orang lain tidak bisa menebak email yang terdaftar.
     await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/atur-sandi`,
     });

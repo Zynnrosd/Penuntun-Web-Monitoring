@@ -9,10 +9,6 @@ import { awalHariIniWIB } from "../lib/waktu";
 import { buatNotifikasiDarurat } from "../services/notifikasi.service";
 import { env } from "../config/env";
 
-// =========================================================
-// TYPES
-// =========================================================
-
 interface TelemetryPayload {
   id_perangkat: string;
   latitude: number;
@@ -53,10 +49,6 @@ interface PowerPayload {
   timestamp?: string;
 }
 
-// =========================================================
-// MQTT TOPICS
-// =========================================================
-
 const TOPIC_TELEMETRY = "penuntun/telemetry/#";
 const TOPIC_DETECTION = "penuntun/detection/#";
 const TOPIC_STATUS = "penuntun/status/#";
@@ -84,10 +76,7 @@ const posisiDiam = new Map<string, PosisiDiam>();
 const GEOFENCE_COOLDOWN_MS = 5 * 60 * 1000;
 const geofenceAlertTerakhir = new Map<string, number>();
 
-// =========================================================
-// VALIDASI PAYLOAD
-// =========================================================
-
+// Validasi payload: data dari tongkat tidak langsung dipercaya, setiap kolom diperiksa tipenya.
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -109,15 +98,11 @@ function isValidTelemetry(data: unknown): data is TelemetryPayload {
     Number.isFinite(data.longitude) &&
     data.longitude >= -180 &&
     data.longitude <= 180 &&
-    (
-      data.baterai == null ||
-      (
-        typeof data.baterai === "number" &&
+    (data.baterai == null ||
+      (typeof data.baterai === "number" &&
         Number.isFinite(data.baterai) &&
         data.baterai >= 0 &&
-        data.baterai <= 100
-      )
-    ) &&
+        data.baterai <= 100)) &&
     (data.timestamp === undefined || typeof data.timestamp === "string")
   );
 }
@@ -134,10 +119,8 @@ function isValidDetection(data: unknown): data is DetectionPayload {
     data.confidence >= 0 &&
     data.confidence <= 1 &&
     (data.inference_ms === undefined ||
-      (typeof data.inference_ms === "number" &&
-        Number.isFinite(data.inference_ms))) &&
-    (data.ai_fps === undefined ||
-      (typeof data.ai_fps === "number" && Number.isFinite(data.ai_fps))) &&
+      (typeof data.inference_ms === "number" && Number.isFinite(data.inference_ms))) &&
+    (data.ai_fps === undefined || (typeof data.ai_fps === "number" && Number.isFinite(data.ai_fps))) &&
     (data.timestamp === undefined || typeof data.timestamp === "string")
   );
 }
@@ -183,10 +166,6 @@ function topicMatchesDevice(topic: string, idPerangkat: string): boolean {
   return Boolean(idTopic) && idTopic === idPerangkat;
 }
 
-// =========================================================
-// PROSES HEARTBEAT
-// =========================================================
-
 async function prosesHeartbeat(data: HeartbeatPayload): Promise<void> {
   const { id_perangkat } = data;
 
@@ -213,15 +192,11 @@ async function prosesHeartbeat(data: HeartbeatPayload): Promise<void> {
   console.log(`[HEARTBEAT] ${id_perangkat} → ONLINE`);
 }
 
-// =========================================================
-// SIMPAN TITIK HENTI
-// =========================================================
-
 async function simpanTitikHenti(
   id_perangkat: string,
   id_yayasan: string,
   diam: PosisiDiam,
-  baterai?: number
+  baterai?: number,
 ): Promise<boolean> {
   const awalHari = awalHariIniWIB();
 
@@ -240,11 +215,7 @@ async function simpanTitikHenti(
     return false;
   }
 
-  if (
-    terakhir &&
-    hitungJarakMeter(terakhir.latitude, terakhir.longitude, diam.lat, diam.lon) <=
-      RADIUS_DIAM_METER
-  ) {
+  if (terakhir && hitungJarakMeter(terakhir.latitude, terakhir.longitude, diam.lat, diam.lon) <= RADIUS_DIAM_METER) {
     return true;
   }
 
@@ -277,10 +248,6 @@ async function simpanTitikHenti(
 
   return true;
 }
-
-// =========================================================
-// PROSES TELEMETRY GPS
-// =========================================================
 
 async function prosesTelemetry(data: TelemetryPayload): Promise<void> {
   const { id_perangkat, latitude, longitude, baterai } = data;
@@ -351,7 +318,7 @@ async function prosesTelemetry(data: TelemetryPayload): Promise<void> {
       id_perangkat,
       perangkat.id_yayasan,
       diam,
-      typeof baterai === "number" ? baterai : undefined
+      typeof baterai === "number" ? baterai : undefined,
     );
     if (!tersimpan) diam.tercatat = false;
   }
@@ -401,10 +368,6 @@ async function prosesTelemetry(data: TelemetryPayload): Promise<void> {
     console.error("[GEOFENCE] Gagal membuat notifikasi:", error);
   }
 }
-
-// =========================================================
-// PROSES TOMBOL SOS
-// =========================================================
 
 const sosSedangDiproses = new Set<string>();
 
@@ -487,10 +450,6 @@ async function prosesSos(data: SosPayload): Promise<void> {
   }
 }
 
-// =========================================================
-// STATUS DAYA RASPBERRY PI 5
-// =========================================================
-
 async function prosesPower(data: PowerPayload): Promise<void> {
   const { id_perangkat, tegangan_5v, undervoltage } = data;
 
@@ -515,10 +474,7 @@ async function prosesPower(data: PowerPayload): Promise<void> {
   }
 }
 
-// =========================================================
-// PROSES AI DETECTION
-// =========================================================
-
+// Deteksi rintangan oleh AI: hanya dicatat di log dan menandai tongkat online, tidak disimpan ke database.
 async function prosesDetection(data: DetectionPayload): Promise<void> {
   const { id_perangkat, class_name, confidence, inference_ms, ai_fps, timestamp } = data;
 
@@ -552,10 +508,6 @@ async function prosesDetection(data: DetectionPayload): Promise<void> {
   }
 }
 
-// =========================================================
-// MQTT LISTENER
-// =========================================================
-
 export function mulaiMqttListener(): MqttClient | undefined {
   if (!env.MQTT_BROKER_URL) {
     console.log("[MQTT] MQTT_BROKER_URL belum diset. Listener tidak dijalankan.");
@@ -582,26 +534,23 @@ export function mulaiMqttListener(): MqttClient | undefined {
   client.on("connect", () => {
     console.log("[MQTT] Terhubung ke broker.");
 
-    client.subscribe(
-      [TOPIC_STATUS, TOPIC_TELEMETRY, TOPIC_DETECTION, TOPIC_SOS, TOPIC_POWER],
-      { qos: 0 },
-      (error) => {
-        if (error) {
-          console.error("[MQTT] Gagal subscribe:", error.message);
-          return;
-        }
-
-        console.log("[MQTT] Subscribe berhasil:");
-        console.log(`       ${TOPIC_STATUS}`);
-        console.log(`       ${TOPIC_TELEMETRY}`);
-        console.log(`       ${TOPIC_DETECTION}`);
-        console.log(`       ${TOPIC_SOS}`);
-        console.log(`       ${TOPIC_POWER}`);
-        console.log("========================================\n");
+    client.subscribe([TOPIC_STATUS, TOPIC_TELEMETRY, TOPIC_DETECTION, TOPIC_SOS, TOPIC_POWER], { qos: 0 }, (error) => {
+      if (error) {
+        console.error("[MQTT] Gagal subscribe:", error.message);
+        return;
       }
-    );
+
+      console.log("[MQTT] Subscribe berhasil:");
+      console.log(`       ${TOPIC_STATUS}`);
+      console.log(`       ${TOPIC_TELEMETRY}`);
+      console.log(`       ${TOPIC_DETECTION}`);
+      console.log(`       ${TOPIC_SOS}`);
+      console.log(`       ${TOPIC_POWER}`);
+      console.log("========================================\n");
+    });
   });
 
+  // Setiap pesan: pastikan JSON valid, periksa isinya, pastikan ID di topik sama dengan ID di payload, lalu proses.
   client.on("message", async (topic, payload) => {
     try {
       let data: unknown;

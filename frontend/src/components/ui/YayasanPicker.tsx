@@ -27,6 +27,7 @@ export function YayasanPicker({
     }
 
     setMencari(true);
+    // Pencarian ditunda 300 ms setelah berhenti mengetik, supaya tidak memanggil server setiap huruf.
     const timer = setTimeout(() => {
       api
         .get<Yayasan[]>(`/auth/yayasan?q=${encodeURIComponent(query.trim())}`)

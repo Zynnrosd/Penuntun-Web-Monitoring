@@ -18,6 +18,7 @@ export type Sesi = {
   yayasan: { nama_yayasan: string; kota_yayasan: string } | null;
 };
 
+// Peran di sini hanya untuk tampilan, hak akses sebenarnya tetap diperiksa backend.
 export function useSession() {
   const [sesi, setSesi] = useState<Sesi | null>(null);
   const [memuat, setMemuat] = useState(true);

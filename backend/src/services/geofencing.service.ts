@@ -1,3 +1,4 @@
+// Rumus Haversine: jarak dua koordinat di permukaan bumi, dalam meter.
 export function hitungJarakMeter(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371000;
   const toRad = (d: number) => (d * Math.PI) / 180;

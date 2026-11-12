@@ -432,6 +432,10 @@ export default function NotifikasiPage() {
                         onClick={() => {
                           setIdPilih(n.id_notifikasi);
                           setGalatAksi("");
+                          // Di layar sempit panel detail berada di bawah daftar, jadi digulir ke sana.
+                          if (window.innerWidth < 1024) {
+                            setTimeout(() => gridRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" }), 0);
+                          }
                         }}
                         aria-current={dipilih}
                         className={`flex min-w-0 flex-1 items-center gap-3 rounded-inner p-4 text-left transition-colors ${
@@ -464,7 +468,7 @@ export default function NotifikasiPage() {
                                 RONA_STATUS[n.status]
                               }`}
                             >
-                              {n.status === "AKTIF" ? "SOS aktif" : TEKS_STATUS[n.status]}
+                              {n.status === "AKTIF" ? "SOS aktif" : n.status === "DITANGANI" ? "Ditangani" : TEKS_STATUS[n.status]}
                             </span>
                           </span>
                         </span>
@@ -533,7 +537,7 @@ export default function NotifikasiPage() {
           ) : (
             <section className="flex min-h-[320px] items-center justify-center rounded-card border-2 border-border bg-surface p-8 lg:min-h-0">
               <p className="max-w-sm text-center text-[15px] leading-6 text-text-secondary">
-                Pilih satu insiden di sebelah kiri untuk melihat lokasi saat tombol ditekan, riwayat pengiriman
+                Pilih satu insiden dari daftar untuk melihat lokasi saat tombol ditekan, riwayat pengiriman
                 WhatsApp, dan tindakan yang tersedia.
               </p>
             </section>
