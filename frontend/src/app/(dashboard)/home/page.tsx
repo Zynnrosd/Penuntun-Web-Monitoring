@@ -1,15 +1,8 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  Smartphone,
-  Wifi,
-  Siren,
-  BatteryWarning,
-  Info,
-} from "lucide-react";
+import { Smartphone, Wifi, Siren, BatteryWarning, Info } from "lucide-react";
 
 import { api } from "@/lib/api-client";
 import { useRealtimeTable } from "@/hooks/useRealtimeTable";
@@ -24,59 +17,34 @@ import { Badge } from "@/components/ui/Badge";
 import { jamWIB } from "@/lib/format";
 import type { Perangkat, Notifikasi, Geofence } from "@/types";
 
-// =========================================================
-// STATUS DAYA
-// =========================================================
-
 type PerangkatDaya = Perangkat & {
   tegangan_5v?: number | null;
   undervoltage?: boolean | null;
   daya_updated_at?: string | null;
 };
 
-type KondisiDaya =
-  | "NORMAL"
-  | "KRITIS"
-  | "TIDAK_DIKETAHUI";
+type KondisiDaya = "NORMAL" | "KRITIS" | "TIDAK_DIKETAHUI";
 
 const BATAS_DATA_LAMA_MS = 60_000;
 
-function kondisiDaya(
-  p: PerangkatDaya,
-  sekarang: number
-): KondisiDaya {
-  if (
-    !p.status_online ||
-    !p.daya_updated_at ||
-    sekarang <= 0
-  ) {
+// Data daya hanya dipercaya bila perangkat online dan datanya belum lebih dari 60 detik.
+function kondisiDaya(p: PerangkatDaya, sekarang: number): KondisiDaya {
+  if (!p.status_online || !p.daya_updated_at || sekarang <= 0) {
     return "TIDAK_DIKETAHUI";
   }
 
   const terakhir = Date.parse(p.daya_updated_at);
 
-  if (
-    !Number.isFinite(terakhir) ||
-    sekarang - terakhir > BATAS_DATA_LAMA_MS ||
-    terakhir > sekarang + 10_000
-  ) {
+  if (!Number.isFinite(terakhir) || sekarang - terakhir > BATAS_DATA_LAMA_MS || terakhir > sekarang + 10_000) {
     return "TIDAK_DIKETAHUI";
   }
 
-  if (
-    typeof p.undervoltage !== "boolean" ||
-    p.tegangan_5v == null ||
-    !Number.isFinite(Number(p.tegangan_5v))
-  ) {
+  if (typeof p.undervoltage !== "boolean" || p.tegangan_5v == null || !Number.isFinite(Number(p.tegangan_5v))) {
     return "TIDAK_DIKETAHUI";
   }
 
   return p.undervoltage ? "KRITIS" : "NORMAL";
 }
-
-// =========================================================
-// BERANDA
-// =========================================================
 
 export default function BerandaPage() {
   const { sesi } = useSession();
@@ -89,17 +57,11 @@ export default function BerandaPage() {
   const [galat, setGalat] = useState("");
   const [sekarang, setSekarang] = useState(0);
 
-  // =====================================================
-  // AMBIL DATA
-  // =====================================================
-
   const muat = useCallback(() => {
     Promise.all([
       api.get<PerangkatDaya[]>("/perangkat"),
       api.get<Notifikasi[]>("/notifikasi"),
-      api
-        .get<Geofence[]>("/geofence")
-        .catch(() => [] as Geofence[]),
+      api.get<Geofence[]>("/geofence").catch(() => [] as Geofence[]),
     ])
       .then(([p, n, g]) => {
         setPerangkat(p);
@@ -113,23 +75,16 @@ export default function BerandaPage() {
         setGalat("");
       })
       .catch((e) => {
-        setGalat(
-          e instanceof Error
-            ? e.message
-            : "Gagal memuat data"
-        );
+        setGalat(e instanceof Error ? e.message : "Gagal memuat data");
       })
       .finally(() => setMemuat(false));
   }, []);
-
-  // =====================================================
-  // REALTIME + POLLING
-  // =====================================================
 
   useEffect(() => {
     setSekarang(Date.now());
     muat();
 
+    // Dimuat ulang setiap 15 detik agar status daya yang kedaluwarsa ikut berubah.
     const timer = setInterval(() => {
       setSekarang(Date.now());
       muat();
@@ -141,35 +96,16 @@ export default function BerandaPage() {
   useRealtimeTable("perangkat", muat);
   useRealtimeTable("notifikasi", muat);
 
-  // =====================================================
-  // HEADER
-  // =====================================================
-
-  const judul = (
-    <PageHeader
-      title="Beranda"
-      subtitle="Ringkasan kondisi pengguna dan perangkat hari ini"
-    />
-  );
-
-  // =====================================================
-  // LOADING
-  // =====================================================
+  const judul = <PageHeader title="Beranda" subtitle="Ringkasan kondisi pengguna dan perangkat hari ini" />;
 
   if (memuat) {
     return (
       <>
         {judul}
-        <p className="text-[15px] text-text-secondary">
-          Memuat data…
-        </p>
+        <p className="text-[15px] text-text-secondary">Memuat data…</p>
       </>
     );
   }
-
-  // =====================================================
-  // ERROR
-  // =====================================================
 
   if (galat) {
     return (
@@ -182,52 +118,21 @@ export default function BerandaPage() {
     );
   }
 
-  // =====================================================
-  // STATISTIK PERANGKAT
-  // =====================================================
-
   const totalPerangkat = perangkat.length;
 
-  const online = perangkat.filter(
-    (p) => p.status_online
-  ).length;
+  const online = perangkat.filter((p) => p.status_online).length;
 
   const offline = totalPerangkat - online;
 
-  // =====================================================
-  // STATISTIK SOS
-  // =====================================================
+  const sosAktif = notifikasi.filter((n) => n.tipe_event === "SOS" && n.status === "AKTIF").length;
 
-  const sosAktif = notifikasi.filter(
-    (n) =>
-      n.tipe_event === "SOS" &&
-      n.status === "AKTIF"
-  ).length;
-
-  // =====================================================
-  // STATISTIK STATUS DAYA
-  // =====================================================
-
-  const hitungDaya = (status: KondisiDaya) =>
-    perangkat.filter(
-      (p) => kondisiDaya(p, sekarang) === status
-    ).length;
+  const hitungDaya = (status: KondisiDaya) => perangkat.filter((p) => kondisiDaya(p, sekarang) === status).length;
 
   const dayaNormal = hitungDaya("NORMAL");
   const dayaKritis = hitungDaya("KRITIS");
-  const dayaTidakDiketahui = hitungDaya(
-    "TIDAK_DIKETAHUI"
-  );
-
-  // =====================================================
-  // NOTIFIKASI TERBARU
-  // =====================================================
+  const dayaTidakDiketahui = hitungDaya("TIDAK_DIKETAHUI");
 
   const notifikasiTerbaru = notifikasi.slice(0, 3);
-
-  // =====================================================
-  // TAMPILAN
-  // =====================================================
 
   return (
     <>
@@ -235,100 +140,50 @@ export default function BerandaPage() {
 
       <div className="flex flex-col gap-6">
 
-        {/* ============================================= */}
-        {/* PERINGATAN ZONA AMAN */}
-        {/* ============================================= */}
+        {!adaZona && totalPerangkat > 0 && sesi?.role === "ADMINISTRATOR" && (
+          <div
+            role="note"
+            className="flex flex-col items-start gap-3.5 rounded-inner bg-surface px-5 py-3.5 shadow-[inset_0_0_0_2px_var(--color-border)] sm:flex-row sm:items-center"
+          >
+            <Info size={22} strokeWidth={2} className="flex-none text-secondary" />
 
-        {!adaZona &&
-          totalPerangkat > 0 &&
-          sesi?.role === "ADMINISTRATOR" && (
-            <div
-              role="note"
-              className="flex flex-col items-start gap-3.5 rounded-inner bg-surface px-5 py-3.5 shadow-[inset_0_0_0_2px_var(--color-border)] sm:flex-row sm:items-center"
+            <p className="flex-1 text-[15px] leading-[22px]">
+              <b>Zona aman belum diatur.</b> Perangkat belum dipantau keluar zona sampai titik dan radius yayasan
+              ditentukan.
+            </p>
+
+            <Link
+              href="/perangkat"
+              className="flex h-10 flex-none items-center rounded-pill bg-secondary px-5 text-sm font-bold text-white"
             >
-              <Info
-                size={22}
-                strokeWidth={2}
-                className="flex-none text-secondary"
-              />
+              Atur zona aman
+            </Link>
+          </div>
+        )}
 
-              <p className="flex-1 text-[15px] leading-[22px]">
-                <b>Zona aman belum diatur.</b> Perangkat
-                belum dipantau keluar zona sampai titik
-                dan radius yayasan ditentukan.
-              </p>
-
-              <Link
-                href="/perangkat"
-                className="flex h-10 flex-none items-center rounded-pill bg-secondary px-5 text-sm font-bold text-white"
-              >
-                Atur zona aman
-              </Link>
-            </div>
-          )}
-
-        {/* ============================================= */}
-        {/* KARTU RINGKASAN */}
-        {/* ============================================= */}
 
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-
           <StatCard
             label="Total perangkat"
             value={totalPerangkat}
             tone="primary"
-            icon={
-              <Smartphone
-                size={22}
-                strokeWidth={2}
-              />
-            }
+            icon={<Smartphone size={22} strokeWidth={2} />}
           />
 
-          <StatCard
-            label="Online"
-            value={online}
-            tone="success"
-            icon={
-              <Wifi
-                size={22}
-                strokeWidth={2}
-              />
-            }
-          />
+          <StatCard label="Online" value={online} tone="success" icon={<Wifi size={22} strokeWidth={2} />} />
 
-          <StatCard
-            label="SOS aktif"
-            value={sosAktif}
-            tone="biru"
-            icon={
-              <Siren
-                size={22}
-                strokeWidth={2}
-              />
-            }
-          />
+          <StatCard label="SOS aktif" value={sosAktif} tone="biru" icon={<Siren size={22} strokeWidth={2} />} />
 
           <StatCard
             label="Daya kritis"
             value={dayaKritis}
             tone="danger"
-            icon={
-              <BatteryWarning
-                size={22}
-                strokeWidth={2}
-              />
-            }
+            icon={<BatteryWarning size={22} strokeWidth={2} />}
           />
-
         </div>
 
-        {/* ============================================= */}
-        {/* GRAFIK STATUS DAYA DAN KONEKSI */}
-        {/* ============================================= */}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-
           <DonutChart
             judul="Status Daya"
             segmen={[
@@ -366,44 +221,25 @@ export default function BerandaPage() {
               },
             ]}
           />
-
         </div>
 
-        {/* ============================================= */}
-        {/* NOTIFIKASI TERBARU */}
-        {/* ============================================= */}
 
         <section className="overflow-hidden rounded-card border-2 border-border bg-surface">
-
           <div className="flex items-center justify-between gap-4 px-6 py-4">
+            <h2 className="text-[22px] font-extrabold leading-7">Notifikasi terbaru</h2>
 
-            <h2 className="text-[22px] font-extrabold leading-7">
-              Notifikasi terbaru
-            </h2>
-
-            <span className="text-sm text-text-secondary">
-              3 terakhir
-            </span>
-
+            <span className="text-sm text-text-secondary">3 terakhir</span>
           </div>
 
           {notifikasiTerbaru.length === 0 ? (
-
             <p className="px-6 pb-6 text-[15px] text-text-secondary">
-              Belum ada kejadian. Notifikasi muncul di sini
-              saat tombol SOS ditekan atau perangkat keluar
-              zona aman.
+              Belum ada kejadian. Notifikasi muncul di sini saat tombol SOS ditekan atau perangkat keluar zona aman.
             </p>
-
           ) : (
-
             <div className="overflow-x-auto">
-
-              <table className="w-full">
-
+              <table className="tabel-kartu w-full">
                 <thead>
                   <tr className="bg-secondary-soft text-left text-[13px] font-bold uppercase tracking-[0.06em] text-[#3F5B82]">
-
                     <th scope="col" className="px-6 py-3">
                       Waktu
                     </th>
@@ -423,80 +259,46 @@ export default function BerandaPage() {
                     <th scope="col" className="px-6 py-3">
                       Status
                     </th>
-
                   </tr>
                 </thead>
 
                 <tbody>
                   {notifikasiTerbaru.map((n) => (
-
-                    <tr
-                      key={n.id_notifikasi}
-                      className="h-12 border-t border-[#EDF1F6]"
-                    >
-
-                      <td className="data px-6 text-[13px]">
+                    <tr key={n.id_notifikasi} className="h-12 border-t border-[#EDF1F6]">
+                      <td data-label="Waktu" className="data px-6 text-[13px]">
                         {jamWIB(n.occurred_at)}
                       </td>
 
-                      <td className="px-6 text-[15px]">
+                      <td data-label="Pengguna" className="px-6 text-[15px]">
                         {n.nama_snapshot ?? "Tanpa pengguna"}
                       </td>
 
-                      <td className="data px-6 text-[13px]">
+                      <td data-label="Perangkat" className="data px-6 text-[13px]">
                         {n.id_perangkat ?? "—"}
                       </td>
 
-                      <td className="px-6">
+                      <td data-label="Tipe" className="px-6">
                         {n.tipe_event === "SOS" ? (
-                          <Badge tone="danger">
-                            SOS
-                          </Badge>
+                          <Badge tone="danger">SOS</Badge>
                         ) : (
-                          <Badge tone="primary">
-                            Zona aman
-                          </Badge>
+                          <Badge tone="primary">Zona aman</Badge>
                         )}
                       </td>
 
-                      <td className="px-6">
+                      <td data-label="Status" className="px-6">
+                        {n.status === "AKTIF" && <StatusPill status="sos-aktif" label="Aktif" />}
 
-                        {n.status === "AKTIF" && (
-                          <StatusPill
-                            status="sos-aktif"
-                            label="Aktif"
-                          />
-                        )}
+                        {n.status === "DITANGANI" && <StatusPill status="ditangani" label="Ditangani" />}
 
-                        {n.status === "DITANGANI" && (
-                          <StatusPill
-                            status="ditangani"
-                            label="Ditangani"
-                          />
-                        )}
-
-                        {n.status === "SELESAI" && (
-                          <StatusPill
-                            status="selesai"
-                            label="Selesai"
-                          />
-                        )}
-
+                        {n.status === "SELESAI" && <StatusPill status="selesai" label="Selesai" />}
                       </td>
-
                     </tr>
-
                   ))}
                 </tbody>
-
               </table>
-
             </div>
-
           )}
-
         </section>
-
       </div>
     </>
   );

@@ -6,7 +6,7 @@ type Status = "online" | "offline" | "sos-aktif" | "ditangani" | "selesai" | "te
 
 const STYLES: Record<Status, string> = {
   online: "bg-success-soft text-success-text",
-  offline: "bg-offline text-white",
+  offline: "bg-secondary-soft text-[#1F3556]",
   "sos-aktif": "bg-danger text-white",
   ditangani: "bg-kritis-soft text-kritis-text",
   selesai: "bg-success-soft text-success-text",

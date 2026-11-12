@@ -45,7 +45,7 @@ export function DetailInsiden({
 
   return (
     <section
-      className="animate-fade-up flex min-h-0 flex-col overflow-hidden rounded-card border-2 border-border bg-surface"
+      className="animate-fade-up flex min-h-0 scroll-mt-[72px] flex-col overflow-hidden rounded-card border-2 border-border bg-surface"
       aria-label={`Detail insiden ${insiden.kode_insiden}`}
     >
       <div className="flex flex-none flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-[18px]">

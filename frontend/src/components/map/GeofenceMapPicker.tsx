@@ -27,10 +27,15 @@ export function GeofenceMapPicker({
   radius: number;
   onPick: (lat: number, lng: number) => void;
 }) {
-  const posisiAwal: [number, number] = center ? [center.lat, center.lng] : [-6.9932, 110.4203];
+  const posisiAwal: [number, number] = [-6.9932, 110.4203];
+
+  // Peta dibuka pas dengan lingkaran zona, supaya zona terlihat utuh di layar lebar maupun sempit.
+  const tampilanAwal = center
+    ? { bounds: L.latLng(center.lat, center.lng).toBounds(radius * 2.4) }
+    : { center: posisiAwal, zoom: 15 };
 
   return (
-    <MapContainer center={posisiAwal} zoom={15} className="h-full w-full rounded-map" style={{ minHeight: 280 }}>
+    <MapContainer {...tampilanAwal} className="h-full w-full rounded-map" style={{ minHeight: 280 }}>
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />
       <KlikHandler onPick={onPick} />
       {center && (

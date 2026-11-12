@@ -12,6 +12,7 @@ const STATUS_KODE: Record<string, { status: number; pesan: string }> = {
   "40001": { status: 409, pesan: "Data sudah diubah akun lain. Muat ulang halaman." },
 };
 
+// Untuk query biasa: pesan internal database tidak pernah dikirim ke pengguna.
 export function balasGalat(res: Response, konteks: string, error: PostgrestError | null) {
   console.error(`[${konteks}]`, error);
   const dikenal = error?.code ? STATUS_KODE[error.code] : undefined;
@@ -20,6 +21,7 @@ export function balasGalat(res: Response, konteks: string, error: PostgrestError
     .json({ message: dikenal?.pesan ?? "Terjadi kesalahan pada server" });
 }
 
+// Untuk fungsi database (RPC): pesannya ditulis sendiri di SQL, misalnya "Sudah ditangani oleh ...", jadi boleh diteruskan.
 export function balasGalatRpc(res: Response, konteks: string, error: PostgrestError | null) {
   console.error(`[${konteks}]`, error);
   const dikenal = error?.code ? STATUS_KODE[error.code] : undefined;

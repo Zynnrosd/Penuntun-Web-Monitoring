@@ -23,6 +23,7 @@ export default function LoginPage() {
     setGalat("");
     setMengirim(true);
 
+    // Login langsung ke Supabase Auth. Pesan galat dibuat umum agar tidak membocorkan email mana yang terdaftar.
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: sandi });
     setMengirim(false);
 

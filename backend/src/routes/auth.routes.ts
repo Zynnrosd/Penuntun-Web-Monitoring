@@ -6,6 +6,7 @@ import { requireAuth, getSession, db } from "../lib/auth";
 
 const router = Router();
 
+// Batas pendaftaran: 5 kali per 15 menit per alamat IP, untuk mencegah pembuatan akun massal.
 const BATAS_PENDAFTARAN = 5;
 const JENDELA_MS = 15 * 60 * 1000;
 const percobaanDaftar = new Map<string, { jumlah: number; mulai: number }>();
@@ -55,6 +56,7 @@ router.post("/register", async (req, res) => {
     metadata.id_yayasan = id_yayasan;
   }
 
+  // Akun dibuat lewat service role. Trigger di database membaca metadata ini untuk membuat yayasan atau baris akun.
   const { data: dibuat, error } = await supabase.auth.admin.createUser({
     email: email.trim(),
     password,
@@ -105,6 +107,7 @@ router.get("/yayasan", async (req, res) => {
   res.json(data ?? []);
 });
 
+// Data akun yang sedang login. Tidak memakai requireAktif agar akun Menunggu atau Ditolak tetap bisa melihat statusnya.
 router.get("/saya", requireAuth, async (req, res) => {
   const { id, role, status, id_yayasan } = getSession(req);
 

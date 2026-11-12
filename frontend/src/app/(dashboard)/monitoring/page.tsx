@@ -12,6 +12,7 @@ import { inisialNama } from "@/hooks/useSession";
 import { koordinat, waktuRelatif } from "@/lib/format";
 import type { Perangkat, Geofence } from "@/types";
 
+// Peta hanya dimuat di browser, karena Leaflet membutuhkan objek window.
 const MapView = dynamic(() => import("@/components/map/MapView").then((m) => m.MapView), { ssr: false });
 
 type Saringan = "SEMUA" | "ONLINE" | "OFFLINE";
@@ -22,6 +23,7 @@ const LABEL_SARINGAN: Record<Saringan, string> = {
   OFFLINE: "Offline",
 };
 
+// SOS diutamakan di atas status online atau offline.
 function keadaan(p: Perangkat) {
   if (p.status_sos) return "SOS" as const;
   return p.status_online ? ("ONLINE" as const) : ("OFFLINE" as const);
@@ -231,7 +233,7 @@ export default function MonitoringPage() {
                         {inisialNama(p.pengguna?.nama_tunanetra)}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <b className="block truncate font-bold leading-5">
+                        <b className="line-clamp-2 font-bold leading-5">
                           {p.pengguna?.nama_tunanetra ?? "Belum dipasangkan"}
                         </b>
                         <span className="data block text-[13px] leading-4 text-text-secondary">
@@ -244,7 +246,11 @@ export default function MonitoringPage() {
                     <span className="flex flex-col gap-1 text-[13px] leading-5">
                       <span className="flex items-center gap-2">
                         <Clock size={15} strokeWidth={2} className="flex-none text-text-secondary" />
-                        {p.status_online ? "Terhubung sekarang" : `Terakhir terlihat ${waktuRelatif(p.last_active)}`}
+                        {p.status_online
+                          ? "Terhubung sekarang"
+                          : p.last_active
+                            ? `Terakhir terlihat ${waktuRelatif(p.last_active)}`
+                            : "Belum pernah terhubung"}
                       </span>
                       <span className="flex items-center gap-2 text-text-secondary">
                         <MapPin size={15} strokeWidth={2} className="flex-none" />

@@ -16,17 +16,11 @@ type PerangkatDaya = Perangkat & {
   daya_updated_at?: string | null;
 };
 
-type KondisiDaya =
-  | "NORMAL"
-  | "KRITIS"
-  | "TIDAK_DIKETAHUI";
+type KondisiDaya = "NORMAL" | "KRITIS" | "TIDAK_DIKETAHUI";
 
 const BATAS_DATA_LAMA_MS = 60_000;
 
-const GAYA: Record<
-  KondisiDaya,
-  { label: string; kelas: string }
-> = {
+const GAYA: Record<KondisiDaya, { label: string; kelas: string }> = {
   NORMAL: {
     label: "Normal",
     kelas: "bg-success-soft text-success-text",
@@ -41,29 +35,19 @@ const GAYA: Record<
   },
 };
 
-function kondisiDaya(
-  p: PerangkatDaya,
-  sekarang: number
-): KondisiDaya {
+// Data daya hanya dipercaya bila perangkat online dan datanya belum lebih dari 60 detik.
+function kondisiDaya(p: PerangkatDaya, sekarang: number): KondisiDaya {
   if (!p.status_online || !p.daya_updated_at) {
     return "TIDAK_DIKETAHUI";
   }
 
   const terakhir = Date.parse(p.daya_updated_at);
 
-  if (
-    !Number.isFinite(terakhir) ||
-    sekarang - terakhir > BATAS_DATA_LAMA_MS ||
-    terakhir > sekarang + 10_000
-  ) {
+  if (!Number.isFinite(terakhir) || sekarang - terakhir > BATAS_DATA_LAMA_MS || terakhir > sekarang + 10_000) {
     return "TIDAK_DIKETAHUI";
   }
 
-  if (
-    typeof p.undervoltage !== "boolean" ||
-    p.tegangan_5v == null ||
-    !Number.isFinite(Number(p.tegangan_5v))
-  ) {
+  if (typeof p.undervoltage !== "boolean" || p.tegangan_5v == null || !Number.isFinite(Number(p.tegangan_5v))) {
     return "TIDAK_DIKETAHUI";
   }
 
@@ -71,8 +55,7 @@ function kondisiDaya(
 }
 
 export default function BateraiPage() {
-  const [perangkat, setPerangkat] =
-    useState<PerangkatDaya[]>([]);
+  const [perangkat, setPerangkat] = useState<PerangkatDaya[]>([]);
 
   const [memuat, setMemuat] = useState(true);
   const [galat, setGalat] = useState("");
@@ -87,11 +70,7 @@ export default function BateraiPage() {
         setGalat("");
       })
       .catch((e) => {
-        setGalat(
-          e instanceof Error
-            ? e.message
-            : "Gagal memuat status daya"
-        );
+        setGalat(e instanceof Error ? e.message : "Gagal memuat status daya");
       })
       .finally(() => setMemuat(false));
   }, []);
@@ -110,20 +89,13 @@ export default function BateraiPage() {
 
   useRealtimeTable("perangkat", muat);
 
-  const judul = (
-    <PageHeader
-      title="Status Daya"
-      subtitle="Pemantauan kondisi daya perangkat PENUNTUN"
-    />
-  );
+  const judul = <PageHeader title="Status Daya" subtitle="Pemantauan kondisi daya perangkat PENUNTUN" />;
 
   if (memuat) {
     return (
       <>
         {judul}
-        <p className="text-[15px] text-text-secondary">
-          Memuat status daya…
-        </p>
+        <p className="text-[15px] text-text-secondary">Memuat status daya…</p>
       </>
     );
   }
@@ -139,10 +111,7 @@ export default function BateraiPage() {
     );
   }
 
-  const hitung = (status: KondisiDaya) =>
-    perangkat.filter(
-      (p) => kondisiDaya(p, sekarang) === status
-    ).length;
+  const hitung = (status: KondisiDaya) => perangkat.filter((p) => kondisiDaya(p, sekarang) === status).length;
 
   const urutan: Record<KondisiDaya, number> = {
     KRITIS: 0,
@@ -150,65 +119,36 @@ export default function BateraiPage() {
     TIDAK_DIKETAHUI: 2,
   };
 
-  const terurut = [...perangkat].sort(
-    (a, b) =>
-      urutan[kondisiDaya(a, sekarang)] -
-      urutan[kondisiDaya(b, sekarang)]
-  );
+  const terurut = [...perangkat].sort((a, b) => urutan[kondisiDaya(a, sekarang)] - urutan[kondisiDaya(b, sekarang)]);
 
   return (
     <>
       {judul}
 
       <div className="flex flex-col gap-6">
-
-        {/* RINGKASAN STATUS DAYA */}
-
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard
-            label="Daya normal"
-            value={hitung("NORMAL")}
-            tone="success"
-          />
+          <StatCard label="Daya normal" value={hitung("NORMAL")} tone="success" />
 
-          <StatCard
-            label="Kritis"
-            value={hitung("KRITIS")}
-            tone="danger"
-          />
+          <StatCard label="Kritis" value={hitung("KRITIS")} tone="danger" />
 
-          <StatCard
-            label="Tidak diketahui"
-            value={hitung("TIDAK_DIKETAHUI")}
-            tone="soft"
-          />
+          <StatCard label="Tidak diketahui" value={hitung("TIDAK_DIKETAHUI")} tone="soft" />
         </div>
 
-        {/* TABEL STATUS DAYA */}
-
         <section className="overflow-hidden rounded-card border-2 border-border bg-surface">
-
           <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <h2 className="text-lg font-extrabold leading-7">
-              Daya per perangkat
-            </h2>
+            <h2 className="text-lg font-extrabold leading-7">Daya per perangkat</h2>
 
-            <span className="text-sm text-text-secondary">
-              Kritis ditampilkan lebih dahulu
-            </span>
+            <span className="text-sm text-text-secondary">Kritis ditampilkan lebih dahulu</span>
           </div>
 
           {perangkat.length === 0 ? (
-            <p className="px-5 pb-6 text-[15px] text-text-secondary">
-              Belum ada perangkat terdaftar.
-            </p>
+            <p className="px-5 pb-6 text-[15px] text-text-secondary">Belum ada perangkat terdaftar.</p>
           ) : (
             <>
-              <div className="max-h-[max(260px,calc(100vh-400px))] overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-secondary-soft">
-                <table className="w-full">
+              <div className="md:max-h-[max(260px,calc(100vh-400px))] overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-secondary-soft">
+                <table className="tabel-kartu w-full">
                   <thead>
                     <tr className="bg-secondary-soft text-left text-[13px] font-bold uppercase tracking-[0.06em] text-[#3F5B82]">
-
                       <th scope="col" className="px-6 py-3">
                         Perangkat
                       </th>
@@ -233,104 +173,54 @@ export default function BateraiPage() {
 
                   <tbody>
                     {terurut.map((p, i) => {
-                      const kondisi = kondisiDaya(
-                        p,
-                        sekarang
-                      );
+                      const kondisi = kondisiDaya(p, sekarang);
 
                       const gaya = GAYA[kondisi];
 
-                      const titik = koordinat(
-                        p.lat_terakhir,
-                        p.long_terakhir
-                      );
+                      const titik = koordinat(p.lat_terakhir, p.long_terakhir);
 
                       return (
-                        <tr
-                          key={p.id_perangkat}
-                          className="border-t border-[#EDF1F6]"
-                        >
-
-                          {/* PERANGKAT */}
-
+                        <tr key={p.id_perangkat} className="border-t border-[#EDF1F6]">
                           <td className="px-6 py-3">
                             <div className="flex items-center gap-3">
                               <span
                                 className={`flex h-10 w-10 flex-none items-center justify-center rounded-pill text-[13px] font-extrabold ${
-                                  i % 2 === 0
-                                    ? "bg-tile-amber text-[#5C3D00]"
-                                    : "bg-tile-blue text-primary"
+                                  i % 2 === 0 ? "bg-tile-amber text-[#5C3D00]" : "bg-tile-blue text-primary"
                                 }`}
                               >
                                 {p.id_perangkat.slice(-2)}
                               </span>
 
-                              <b className="data text-[15px] font-bold">
-                                {p.id_perangkat}
-                              </b>
+                              <b className="data text-[15px] font-bold">{p.id_perangkat}</b>
                             </div>
                           </td>
 
-                          {/* LOKASI TERAKHIR */}
+                          <td data-label="Lokasi terakhir" className="px-6 py-3">
+                            <div className="text-[15px]">{p.lokasi_terakhir ?? "Belum ada lokasi"}</div>
 
-                          <td className="px-6 py-3">
-                            <div className="text-[15px]">
-                              {p.lokasi_terakhir ??
-                                "Belum ada lokasi"}
-                            </div>
-
-                            {titik && (
-                              <div className="data text-[13px] text-text-secondary">
-                                {titik}
-                              </div>
-                            )}
+                            {titik && <div className="data text-[13px] text-text-secondary">{titik}</div>}
                           </td>
 
-                          {/* STATUS DAYA */}
-
-                          <td className="px-6 py-3">
-                            <span
-                              className={`inline-flex rounded-pill px-3 py-1 text-[13px] font-bold ${gaya.kelas}`}
-                            >
+                          <td data-label="Status daya" className="px-6 py-3">
+                            <span className={`inline-flex rounded-pill px-3 py-1 text-[13px] font-bold ${gaya.kelas}`}>
                               {gaya.label}
                             </span>
                           </td>
 
-                          {/* KONEKSI */}
-
-                          <td className="px-6 py-3">
+                          <td data-label="Koneksi" className="px-6 py-3">
                             <StatusPill
-                              status={
-                                p.status_online
-                                  ? "online"
-                                  : "offline"
-                              }
-                              label={
-                                p.status_online
-                                  ? "Online"
-                                  : "Offline"
-                              }
+                              status={p.status_online ? "online" : "offline"}
+                              label={p.status_online ? "Online" : "Offline"}
                             />
                           </td>
 
-                          {/* DATA DAYA TERAKHIR */}
-
-                          <td className="px-6 py-3">
+                          <td data-label="Data daya terakhir" className="px-6 py-3">
                             <div className="flex items-center gap-2 text-[15px]">
-                              <Clock
-                                size={16}
-                                strokeWidth={2}
-                                className="flex-none text-text-secondary"
-                              />
+                              <Clock size={16} strokeWidth={2} className="flex-none text-text-secondary" />
 
-                              {p.daya_updated_at
-                                ? waktuRelatif(
-                                    p.daya_updated_at
-                                  )
-                                : "Belum ada data"}
+                              {p.daya_updated_at ? waktuRelatif(p.daya_updated_at) : "Belum ada data"}
                             </div>
                           </td>
-
                         </tr>
                       );
                     })}

@@ -16,6 +16,7 @@ export class ApiError extends Error {
   }
 }
 
+// Token login Supabase dikirim di header Authorization. Backend memeriksanya di requireAuth.
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;

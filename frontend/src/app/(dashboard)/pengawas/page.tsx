@@ -2,10 +2,11 @@
 
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Check } from "lucide-react";
+import { AlertCircle, Check, Trash2 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { inisialNama } from "@/hooks/useSession";
 import { jamWIB, waktuRelatif } from "@/lib/format";
 import type { StatusAkun } from "@/hooks/useSession";
@@ -74,6 +75,10 @@ export default function PengawasPage() {
   const [kabar, setKabar] = useState("");
   const [sedangDiproses, setSedangDiproses] = useState<string | null>(null);
 
+  const [hapus, setHapus] = useState<AkunPengawas | null>(null);
+  const [menghapus, setMenghapus] = useState(false);
+  const [galatHapus, setGalatHapus] = useState("");
+
   const muat = useCallback(() => {
     api
       .get<AkunPengawas[]>("/pengawas")
@@ -99,6 +104,25 @@ export default function PengawasPage() {
       setGalatAksi(err instanceof Error ? err.message : "Tindakan gagal dijalankan");
     } finally {
       setSedangDiproses(null);
+    }
+  }
+
+  // Hapus hanya untuk akun Ditolak. Akun yang pernah aktif cukup dinonaktifkan agar riwayat insiden tetap utuh.
+  async function konfirmasiHapus() {
+    if (!hapus) return;
+
+    setGalatHapus("");
+    setMenghapus(true);
+    try {
+      const hasil = await api.delete<{ message: string }>(`/pengawas/${hapus.id_admin}`);
+      setGalatAksi("");
+      setKabar(hasil.message);
+      setHapus(null);
+      muat();
+    } catch (err) {
+      setGalatHapus(err instanceof Error ? err.message : "Gagal menghapus akun");
+    } finally {
+      setMenghapus(false);
     }
   }
 
@@ -164,7 +188,7 @@ export default function PengawasPage() {
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="tabel-kartu w-full">
                 <thead>
                   <tr className="bg-secondary-soft text-left text-[13px] font-bold uppercase tracking-[0.06em] text-[#3F5B82]">
                     <th scope="col" className="px-5 py-3">Calon Pengawas</th>
@@ -179,11 +203,11 @@ export default function PengawasPage() {
                       <td className="px-5 py-3">
                         <Orang nama={a.nama_staf} warnaKe={i} />
                       </td>
-                      <td className="px-5 py-3 text-sm">{a.email}</td>
-                      <td className="px-5 py-3 text-sm">
+                      <td data-label="Email" className="px-5 py-3 text-sm">{a.email}</td>
+                      <td data-label="Mengajukan" className="px-5 py-3 text-sm">
                         {waktuRelatif(a.created_at)}, {jamWIB(a.created_at)}
                       </td>
-                      <td className="px-5 py-3">
+                      <td data-label="Tindakan" className="px-5 py-3">
                         <div className="flex items-center justify-end gap-2">
                           <Button
                             variant="secondary"
@@ -232,7 +256,7 @@ export default function PengawasPage() {
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="tabel-kartu w-full">
                 <thead>
                   <tr className="bg-secondary-soft text-left text-[13px] font-bold uppercase tracking-[0.06em] text-[#3F5B82]">
                     <th scope="col" className="px-5 py-3">Pengawas</th>
@@ -247,12 +271,22 @@ export default function PengawasPage() {
                       <td className="px-5 py-3">
                         <Orang nama={a.nama_staf} warnaKe={i} />
                       </td>
-                      <td className="px-5 py-3 text-sm">{a.email}</td>
-                      <td className="px-5 py-3">
+                      <td data-label="Email" className="px-5 py-3 text-sm">{a.email}</td>
+                      <td data-label="Status" className="px-5 py-3">
                         <Status status={a.status} />
                       </td>
-                      <td className="px-5 py-3">
-                        <div className="flex justify-end">
+                      <td data-label="Tindakan" className="px-5 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          {a.status === "DITOLAK" && (
+                            <button
+                              onClick={() => setHapus(a)}
+                              disabled={sedangDiproses === a.id_admin}
+                              aria-label={`Hapus ${a.nama_staf}`}
+                              className="flex h-9 w-9 items-center justify-center rounded-pill text-text-secondary hover:bg-danger-soft hover:text-danger-text disabled:opacity-50"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                           {a.status === "AKTIF" ? (
                             <Button
                               variant="secondary"
@@ -295,10 +329,50 @@ export default function PengawasPage() {
         </section>
 
         <p className="text-[13px] leading-5 text-text-secondary">
-          Akun Pengawas tidak dapat dihapus, hanya dinonaktifkan. Akun nonaktif tetap tercatat sebagai riwayat
-          penanganan insiden, tetapi tidak bisa masuk ke dashboard dan tidak menerima pesan SOS.
+          Hanya akun berstatus Ditolak yang dapat dihapus. Akun yang pernah aktif cukup dinonaktifkan: akun itu tetap
+          tercatat sebagai riwayat penanganan insiden, tetapi tidak bisa masuk ke dashboard dan tidak menerima pesan
+          SOS.
         </p>
       </div>
+
+      {hapus && (
+        <Modal
+          judul="Hapus akun Pengawas"
+          onTutup={() => {
+            setHapus(null);
+            setGalatHapus("");
+          }}
+        >
+          <div className="flex flex-col gap-4">
+            <p className="text-[15px] leading-6">
+              Hapus akun <b>{hapus.nama_staf}</b> ({hapus.email})? Permintaannya hilang dari daftar, dan email ini dapat
+              dipakai untuk mendaftar lagi.
+            </p>
+
+            {galatHapus && (
+              <p role="alert" className="flex gap-3 rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger-text">
+                <AlertCircle size={18} className="flex-none" />
+                {galatHapus}
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              <Button variant="danger" onClick={konfirmasiHapus} disabled={menghapus} className="flex-1">
+                {menghapus ? "Menghapus…" : "Hapus"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setHapus(null);
+                  setGalatHapus("");
+                }}
+              >
+                Batal
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

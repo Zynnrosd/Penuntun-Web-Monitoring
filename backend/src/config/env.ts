@@ -1,6 +1,7 @@
 // backend/src/config/env.ts
 
 import dns from "node:dns";
+// Utamakan IPv4 agar koneksi ke Supabase dan broker MQTT tidak gagal di jaringan tanpa IPv6.
 dns.setDefaultResultOrder("ipv4first");
 
 import dotenv from "dotenv";

@@ -77,6 +77,7 @@ async function simpanZona(req: Request, res: Response, idPerangkat: string | nul
   res.json(data);
 }
 
+// Mengubah zona hanya untuk Administrator. RLS di database juga membatasi hal yang sama.
 router.put("/yayasan", requireRole("ADMINISTRATOR"), (req, res) =>
   simpanZona(req, res, null, "GEOFENCE simpan zona yayasan")
 );

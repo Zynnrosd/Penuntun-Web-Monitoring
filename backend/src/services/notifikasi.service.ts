@@ -23,6 +23,7 @@ export async function buatNotifikasiDarurat(params: Kejadian) {
   if (galatPerangkat) throw new Error(`Gagal membaca perangkat: ${galatPerangkat.message}`);
   if (!perangkat) throw new Error(`Perangkat ${params.id_perangkat} tidak terdaftar`);
 
+  // Nama pengguna disalin ke insiden (nama_snapshot) supaya riwayat tetap benar walau tongkat dipindah ke orang lain.
   const pengguna = perangkat.pengguna as unknown as { nama_tunanetra: string } | null;
 
   const { data: notif, error } = await supabase
@@ -71,6 +72,7 @@ async function antreanWhatsApp(idNotifikasi: number, idYayasan: string, pesan: s
   for (const admin of penerima) {
     const status = await kirimNotifikasiWhatsApp(admin.no_wa as string, pesan);
 
+    // Setiap pengiriman dicatat (SENT atau FAILED) agar tampil di dashboard dan bisa dikirim ulang.
     const { error: galatCatat } = await supabase.from("notifikasi_delivery").insert({
       id_yayasan: idYayasan,
       id_notifikasi: idNotifikasi,

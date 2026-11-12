@@ -5,6 +5,7 @@ import { env } from "../config/env";
 
 const opsi = { auth: { persistSession: false, autoRefreshToken: false } };
 
+// Service role: melewati RLS. Hanya untuk proses server (MQTT, WhatsApp, pendaftaran), tidak pernah dikirim ke frontend.
 export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, opsi);
 
 export const supabaseAnon = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, opsi);

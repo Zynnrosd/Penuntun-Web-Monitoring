@@ -38,6 +38,7 @@ app.use((_req, res) => {
   res.status(404).json({ message: "Endpoint tidak ditemukan" });
 });
 
+// Galat tak terduga: rinciannya hanya dicatat di log server, pengguna menerima pesan umum.
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("[API] Kesalahan tidak tertangani:", err);
   res.status(500).json({ message: "Terjadi kesalahan pada server" });
