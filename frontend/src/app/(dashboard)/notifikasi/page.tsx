@@ -45,6 +45,7 @@ export default function NotifikasiPage() {
   const [konfirmasiBersih, setKonfirmasiBersih] = useState(false);
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const sudahPilihDariAlamat = useRef(false);
 
   const muat = useCallback(() => {
     Promise.all([
@@ -54,6 +55,13 @@ export default function NotifikasiPage() {
       .then(([aktif, diarsipkan]) => {
         setDaftar(aktif);
         setArsip(diarsipkan);
+
+        // Dibuka dari tombol "Tangani sekarang" di banner (/notifikasi?id=...): insiden itu langsung terpilih.
+        if (!sudahPilihDariAlamat.current) {
+          sudahPilihDariAlamat.current = true;
+          const id = Number(new URLSearchParams(window.location.search).get("id"));
+          if (aktif.some((n) => n.id_notifikasi === id)) setIdPilih(id);
+        }
       })
       .catch((e) => setGalat(e instanceof Error ? e.message : "Gagal memuat data"))
       .finally(() => setMemuat(false));

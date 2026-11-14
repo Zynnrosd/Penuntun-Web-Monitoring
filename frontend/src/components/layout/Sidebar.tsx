@@ -25,11 +25,13 @@ const MENU_MANAJEMEN = [
 export function Sidebar({
   isAdmin,
   jumlahMenunggu = 0,
+  jumlahSos = 0,
   onNavigate,
   onKeluar,
 }: {
   isAdmin: boolean;
   jumlahMenunggu?: number;
+  jumlahSos?: number;
   onNavigate?: () => void;
   onKeluar: () => void;
 }) {
@@ -61,6 +63,7 @@ export function Sidebar({
           <Link key={href} href={href} onClick={onNavigate} className={kelas(href)}>
             <Icon size={18} strokeWidth={2} />
             {label}
+            {href === "/notifikasi" && jumlahSos > 0 && <Lencana jumlah={jumlahSos} />}
           </Link>
         ))}
 
@@ -73,11 +76,7 @@ export function Sidebar({
               <Link key={href} href={href} onClick={onNavigate} className={kelas(href)}>
                 <Icon size={18} strokeWidth={2} />
                 {label}
-                {href === "/pengawas" && jumlahMenunggu > 0 && (
-                  <span className="ml-auto flex h-[22px] min-w-[22px] items-center justify-center rounded-pill bg-danger px-1.5 text-[13px] font-semibold text-white">
-                    {jumlahMenunggu}
-                  </span>
-                )}
+                {href === "/pengawas" && jumlahMenunggu > 0 && <Lencana jumlah={jumlahMenunggu} />}
               </Link>
             ))}
           </>
@@ -94,5 +93,13 @@ export function Sidebar({
         </button>
       </div>
     </aside>
+  );
+}
+
+function Lencana({ jumlah }: { jumlah: number }) {
+  return (
+    <span className="ml-auto flex h-[22px] min-w-[22px] items-center justify-center rounded-pill bg-danger px-1.5 text-[13px] font-semibold text-white">
+      {jumlah}
+    </span>
   );
 }
