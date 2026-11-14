@@ -1,17 +1,19 @@
 // frontend/src/app/(dashboard)/layout.tsx
 
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, X, ShieldOff, WifiOff } from "lucide-react";
 import { useSession } from "@/hooks/useSession";
-import { useRealtimePutus } from "@/hooks/useRealtimeTable";
+import { useRealtimePutus, useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { InsidenAktifContext } from "@/components/layout/BannerSos";
 import { KonfirmasiKeluar } from "@/components/ui/KonfirmasiKeluar";
 import { api } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
+import type { Notifikasi } from "@/types";
 
-// /perangkat tidak termasuk: Pengawas memasangkan tongkat di sana. Tambah, hapus, dan zona aman dibatasi di dalam halamannya.
+// perangkat tidak termasuk: Pengawas memasangkan tongkat di sana. Tambah, hapus, dan zona aman dibatasi di dalam halamannya.
 const HANYA_ADMINISTRATOR = ["/pengguna", "/pengawas"];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -21,7 +23,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarTerbuka, setSidebarTerbuka] = useState(false);
   const [jumlahMenunggu, setJumlahMenunggu] = useState(0);
   const [konfirmasiKeluar, setKonfirmasiKeluar] = useState(false);
+  const [insidenAktif, setInsidenAktif] = useState<Notifikasi[]>([]);
   const keluarSendiri = useRef(false);
+
+  // Insiden berstatus AKTIF (SOS dan keluar zona aman) untuk banner merah di bawah judul halaman
+  // dan angka di menu Notifikasi SOS.
+  const muatInsidenAktif = useCallback(() => {
+    if (sesi?.status !== "AKTIF") return;
+    api
+      .get<Notifikasi[]>("/notifikasi")
+      .then((daftar) => setInsidenAktif(daftar.filter((n) => n.status === "AKTIF")))
+      .catch(() => setInsidenAktif([]));
+  }, [sesi?.status]);
+
+  useEffect(muatInsidenAktif, [muatInsidenAktif]);
+  useRealtimeTable("notifikasi", muatInsidenAktif);
 
   // Sesi yang berakhir sendiri (token tidak bisa diperbarui) diberi tahu lewat halaman khusus.
   // Keluar lewat tombol Keluar tidak termasuk, karena sudah ditandai di keluar().
@@ -83,6 +99,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Sidebar
           isAdmin={isAdmin}
           jumlahMenunggu={jumlahMenunggu}
+          jumlahSos={insidenAktif.length}
           onNavigate={() => setSidebarTerbuka(false)}
           onKeluar={() => {
             setSidebarTerbuka(false);
@@ -105,7 +122,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 md:px-7">
           <BannerKoneksi />
-          {tanpaIzin ? <AksesDitolak /> : children}
+          <InsidenAktifContext.Provider value={insidenAktif}>
+            {tanpaIzin ? <AksesDitolak /> : children}
+          </InsidenAktifContext.Provider>
         </div>
       </div>
 
