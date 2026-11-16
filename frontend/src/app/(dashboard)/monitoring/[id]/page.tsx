@@ -1,11 +1,11 @@
 // frontend/src/app/(dashboard)/monitoring/[id]/page.tsx
 
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, ChevronDown, Route, WifiOff } from "lucide-react";
+import { ArrowLeft, ChevronDown, RefreshCw, Route, WifiOff } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useRealtimePutus, useRealtimeTable } from "@/hooks/useRealtimeTable";
@@ -32,6 +32,13 @@ export default function MonitoringDetailPage() {
   const [memuat, setMemuat] = useState(true);
   const [galat, setGalat] = useState("");
 
+  // Refresh lokasi tidak melakukan reload halaman; data diambil dari API perangkat.
+  const [memperbaruiLokasi, setMemperbaruiLokasi] = useState(false);
+  const [terakhirDiperiksa, setTerakhirDiperiksa] = useState<string | null>(null);
+  const [pesanRefresh, setPesanRefresh] = useState("");
+  const refreshBerjalan = useRef(false);
+  const perangkatTerakhir = useRef<Perangkat | null>(null);
+
   const [riwayat, setRiwayat] = useState<TitikRiwayat[] | null>(null);
   const [riwayatTerbuka, setRiwayatTerbuka] = useState(false);
   const [memuatRiwayat, setMemuatRiwayat] = useState(false);
@@ -44,9 +51,12 @@ export default function MonitoringDetailPage() {
       api.get<Geofence[]>("/geofence").catch(() => [] as Geofence[]),
     ])
       .then(([daftarPerangkat, daftarPengguna, daftarZona]) => {
-        setPerangkat(daftarPerangkat.find((p) => p.id_perangkat === id) ?? null);
+        const ditemukan = daftarPerangkat.find((p) => p.id_perangkat === id) ?? null;
+        perangkatTerakhir.current = ditemukan;
+        setPerangkat(ditemukan);
         setPengguna(daftarPengguna);
         setZona(daftarZona);
+        setTerakhirDiperiksa(new Date().toISOString());
         setGalat("");
       })
       .catch((e) => setGalat(e instanceof Error ? e.message : "Gagal memuat data"))
@@ -55,6 +65,53 @@ export default function MonitoringDetailPage() {
 
   useEffect(muat, [muat]);
   useRealtimeTable("perangkat", muat);
+
+  // Tombol manual dan polling mengambil lokasi terakhir dari database.
+  // Waktu pemeriksaan bukan waktu GPS mendapatkan fix.
+  const refreshLokasi = useCallback(async () => {
+    if (refreshBerjalan.current) return;
+    refreshBerjalan.current = true;
+    setMemperbaruiLokasi(true);
+
+    try {
+      const daftar = await api.get<Perangkat[]>("/perangkat");
+      const terbaru = daftar.find((p) => p.id_perangkat === id) ?? null;
+      const sebelumnya = perangkatTerakhir.current;
+
+      perangkatTerakhir.current = terbaru;
+      setPerangkat(terbaru);
+      setTerakhirDiperiksa(new Date().toISOString());
+
+      if (!terbaru) {
+        setPesanRefresh("Perangkat tidak ditemukan.");
+      } else if (terbaru.lat_terakhir == null || terbaru.long_terakhir == null) {
+        setPesanRefresh("GPS belum mengirim koordinat valid.");
+      } else if (
+        sebelumnya &&
+        (sebelumnya.lat_terakhir !== terbaru.lat_terakhir ||
+          sebelumnya.long_terakhir !== terbaru.long_terakhir)
+      ) {
+        setPesanRefresh("Koordinat berubah sejak pengecekan sebelumnya.");
+      } else {
+        setPesanRefresh("Koordinat belum berubah; yang tampil adalah posisi terakhir tersimpan.");
+      }
+    } catch (err) {
+      setPesanRefresh(
+        `Gagal memeriksa lokasi: ${err instanceof Error ? err.message : "Kesalahan jaringan"}`
+      );
+    } finally {
+      refreshBerjalan.current = false;
+      setMemperbaruiLokasi(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+  const interval = window.setInterval(() => {
+    void refreshLokasi();
+  }, 120_000);
+
+  return () => window.clearInterval(interval);
+}, [refreshLokasi]);
 
   // Bila realtime putus, label "Live" tidak ditampilkan agar data lama tidak terlihat seperti data terbaru.
   const koneksiPutus = useRealtimePutus();
@@ -163,26 +220,52 @@ export default function MonitoringDetailPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           {kembali}
 
-          {perangkat.status_sos ? (
-            <span className="animate-pulse-sos flex items-center rounded-pill bg-danger px-3.5 py-1 text-[13px] font-bold text-white">
-              SOS aktif
-            </span>
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            {perangkat.status_sos ? (
+              <span className="animate-pulse-sos flex items-center rounded-pill bg-danger px-3.5 py-1 text-[13px] font-bold text-white">
+                SOS aktif
+              </span>
+  
+            ) : perangkat.status_online && !koneksiPutus ? (
+              <span className="flex items-center gap-2 rounded-pill bg-success-soft px-3.5 py-1 text-[13px] font-bold text-success-text">
+                <i className="h-2 w-2 rounded-pill bg-live" />
+                Perangkat online
+              </span>
+            ) : (
+              <span className="flex items-center gap-2 rounded-pill bg-secondary-soft px-3.5 py-1 text-[13px] font-bold text-[#1F3556]">
+                <i className="h-2 w-2 rounded-pill bg-offline" />
+                {perangkat.status_online
+                  ? `Koneksi live terputus · data terakhir ${waktuRelatif(perangkat.last_active)}`
+                  : perangkat.last_active
+                    ? `Offline · terakhir terlihat ${waktuRelatif(perangkat.last_active)}`
+                    : "Offline · belum pernah terhubung"}
+              </span>
+            )}
+  
+            <button
+              type="button"
+              onClick={() => void refreshLokasi()}
+              disabled={memperbaruiLokasi}
+              aria-label="Periksa lokasi terakhir perangkat sekarang"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-input border-2 border-border bg-surface px-4 text-[13px] font-bold text-text-primary transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw size={16} className={memperbaruiLokasi ? "animate-spin" : ""} />
+              {memperbaruiLokasi ? "Memeriksa…" : "Refresh lokasi"}
+            </button>
+          </div>
+        </div>
 
-          ) : perangkat.status_online && !koneksiPutus ? (
-            <span className="flex items-center gap-2 rounded-pill bg-success-soft px-3.5 py-1 text-[13px] font-bold text-success-text">
-              <i className="h-2 w-2 rounded-pill bg-live" />
-              Live · data masuk sekarang
-            </span>
-          ) : (
-            <span className="flex items-center gap-2 rounded-pill bg-secondary-soft px-3.5 py-1 text-[13px] font-bold text-[#1F3556]">
-              <i className="h-2 w-2 rounded-pill bg-offline" />
-              {perangkat.status_online
-                ? `Koneksi live terputus · data terakhir ${waktuRelatif(perangkat.last_active)}`
-                : perangkat.last_active
-                  ? `Offline · terakhir terlihat ${waktuRelatif(perangkat.last_active)}`
-                  : "Offline · belum pernah terhubung"}
-            </span>
-          )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-text-secondary">
+          <span className="inline-flex items-center gap-1.5">
+            <RefreshCw size={14} className={memperbaruiLokasi ? "animate-spin" : ""} />
+            {memperbaruiLokasi
+  ? "Mengecek data terbaru…"
+  : "Refresh otomatis setiap 2 menit"}
+          </span>
+          {terakhirDiperiksa && <span>Terakhir dicek: {jamWIB(terakhirDiperiksa)} WIB</span>}
+          <span className="font-medium text-text-primary">
+            {pesanRefresh || "Peta menampilkan koordinat terakhir yang tersimpan, bukan jaminan posisi saat ini."}
+          </span>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">

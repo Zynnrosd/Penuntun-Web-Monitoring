@@ -46,6 +46,7 @@ interface PowerPayload {
   id_perangkat: string;
   tegangan_5v: number;
   undervoltage: boolean;
+  uptime_seconds?: number;
   timestamp?: string;
 }
 
@@ -156,6 +157,11 @@ function isValidPower(data: unknown): data is PowerPayload {
     data.tegangan_5v >= 0 &&
     data.tegangan_5v <= 7 &&
     typeof data.undervoltage === "boolean" &&
+    (data.uptime_seconds === undefined ||
+      (typeof data.uptime_seconds === "number" &&
+        Number.isFinite(data.uptime_seconds) &&
+        data.uptime_seconds >= 0 &&
+        data.uptime_seconds <= 2147483647)) &&
     (data.timestamp === undefined || typeof data.timestamp === "string")
   );
 }
@@ -451,15 +457,20 @@ async function prosesSos(data: SosPayload): Promise<void> {
 }
 
 async function prosesPower(data: PowerPayload): Promise<void> {
-  const { id_perangkat, tegangan_5v, undervoltage } = data;
+  const { id_perangkat, tegangan_5v, undervoltage, uptime_seconds } = data;
+  const sekarang = new Date().toISOString();
 
-  // Tanggal dari server agar data yang terlambat tidak tampak sebagai data terbaru.
   const { data: perangkat, error } = await supabase
     .from("perangkat")
     .update({
       tegangan_5v,
       undervoltage,
-      daya_updated_at: new Date().toISOString(),
+      daya_updated_at: sekarang,
+      status_online: true,
+      last_active: sekarang,
+      ...(typeof uptime_seconds === "number"
+        ? { uptime_seconds: Math.floor(uptime_seconds) }
+        : {}),
     })
     .eq("id_perangkat", id_perangkat)
     .select("id_perangkat")
@@ -470,7 +481,10 @@ async function prosesPower(data: PowerPayload): Promise<void> {
   } else if (!perangkat) {
     console.warn(`[POWER] Perangkat tidak ditemukan: ${id_perangkat}`);
   } else {
-    console.log(`[POWER] ${id_perangkat} ${tegangan_5v.toFixed(3)} V | ${undervoltage ? "UNDERVOLTAGE" : "NORMAL"}`);
+    const lama = typeof uptime_seconds === "number"
+      ? ` | uptime ${Math.floor(uptime_seconds)} dtk`
+      : " | uptime belum dikirim";
+    console.log(`[POWER] ${id_perangkat} ${tegangan_5v.toFixed(3)} V | ${undervoltage ? "UNDERVOLTAGE" : "NORMAL"}${lama}`);
   }
 }
 
