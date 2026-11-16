@@ -11,13 +11,12 @@ router.use(requireAuth, requireAktif);
 const KOLOM =
   "id_perangkat, id_yayasan, dipakai_oleh, dipasang_oleh, dipasang_pada, " +
   "lat_terakhir, long_terakhir, lokasi_terakhir, baterai_terakhir, " +
-  "tegangan_5v, undervoltage, daya_updated_at, " +
+  "tegangan_5v, undervoltage, daya_updated_at, uptime_seconds, " +
   "status_online, status_sos, last_active, " +
   "pengguna:pengguna_tunanetra!perangkat_pemakai_fk(nama_tunanetra)";
 
 router.get("/", async (req, res) => {
   const { data, error } = await db(req).from("perangkat").select(KOLOM).order("id_perangkat");
-
   if (error) return balasGalat(res, "PERANGKAT daftar", error);
   res.json(data);
 });
@@ -36,10 +35,8 @@ router.get("/:id/riwayat", async (req, res) => {
   res.json(data);
 });
 
-// Menambah tongkat baru, khusus Administrator. Serial number harus sama dengan ID yang dikirim tongkat.
 router.post("/", requireRole("ADMINISTRATOR"), async (req, res) => {
   const { id_perangkat } = req.body;
-
   if (typeof id_perangkat !== "string" || !id_perangkat.trim()) {
     return res.status(400).json({ message: "Serial number perangkat wajib diisi" });
   }
@@ -56,10 +53,8 @@ router.post("/", requireRole("ADMINISTRATOR"), async (req, res) => {
   res.status(201).json(data);
 });
 
-// Fungsi database menolak bila tongkat sudah diubah akun lain lebih dulu (dipasang_pada_sebelumnya).
 router.patch("/:id/pairing", async (req, res) => {
   const { dipakai_oleh, dipasang_pada_sebelumnya } = req.body;
-
   if (dipakai_oleh != null && typeof dipakai_oleh !== "string") {
     return res.status(400).json({ message: "Pengguna tidak valid" });
   }
@@ -75,7 +70,10 @@ router.patch("/:id/pairing", async (req, res) => {
 });
 
 router.delete("/:id", requireRole("ADMINISTRATOR"), async (req, res) => {
-  const { error, count } = await db(req).from("perangkat").delete({ count: "exact" }).eq("id_perangkat", req.params.id);
+  const { error, count } = await db(req)
+    .from("perangkat")
+    .delete({ count: "exact" })
+    .eq("id_perangkat", req.params.id);
 
   if (error) return balasGalat(res, "PERANGKAT hapus", error);
   if (!count) return res.status(404).json({ message: "Perangkat tidak ditemukan" });
