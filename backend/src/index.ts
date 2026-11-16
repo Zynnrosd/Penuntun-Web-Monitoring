@@ -19,7 +19,14 @@ import { mulaiPengirimWhatsApp } from "./services/whatsapp.service";
 
 const app = express();
 
-app.use(cors({ origin: true, credentials: true }));
+// Di hosting, backend berada di balik proxy. Baris ini membuat req.ip berisi IP pengunjung asli,
+// sehingga pembatas pendaftaran per IP bekerja dengan benar.
+app.set("trust proxy", 1);
+
+// FRONTEND_URL diisi alamat frontend (boleh lebih dari satu, dipisah koma). Bila kosong, misalnya saat
+// pengembangan lokal, semua asal diizinkan.
+const asalDiizinkan = env.FRONTEND_URL.split(",").map((s) => s.trim()).filter(Boolean);
+app.use(cors({ origin: asalDiizinkan.length > 0 ? asalDiizinkan : true, credentials: true }));
 app.use(express.json());
 
 app.get("/health", (_req, res) => {

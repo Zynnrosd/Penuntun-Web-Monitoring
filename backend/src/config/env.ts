@@ -20,4 +20,5 @@ export const env = {
   SUPABASE_ANON_KEY: wajib("SUPABASE_ANON_KEY"),
   MQTT_BROKER_URL: process.env.MQTT_BROKER_URL || "",
   WHATSAPP_GATEWAY_API_KEY: process.env.WHATSAPP_GATEWAY_API_KEY || "",
+  FRONTEND_URL: process.env.FRONTEND_URL || "",
 };

@@ -23,7 +23,11 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   // Klien Supabase atas nama pengguna ini, jadi RLS membatasi data ke yayasannya sendiri.
   const klien = supabaseSebagai(token);
 
-  const { data: auth, error: authError } = await klien.auth.getUser(token);
+    const { data: auth, error: authError } = await klien.auth.getUser(token);
+  // Gagal karena server tidak bisa menghubungi Supabase (misalnya internet putus), bukan karena sesinya salah.
+  if (authError?.name === "AuthRetryableFetchError") {
+    return res.status(503).json({ message: "Server tidak dapat terhubung ke internet. Periksa koneksi lalu coba lagi." });
+  }
   if (authError || !auth.user) {
     return res.status(401).json({ message: "Sesi tidak valid, silakan login ulang" });
   }
