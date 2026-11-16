@@ -6,8 +6,8 @@ import { requireAuth, getSession, db } from "../lib/auth";
 
 const router = Router();
 
-// Batas pendaftaran: 5 kali per 15 menit per alamat IP, untuk mencegah pembuatan akun massal.
-const BATAS_PENDAFTARAN = 5;
+// Batas pendaftaran: 50 kali per 15 menit per alamat IP, untuk mencegah pembuatan akun massal.
+const BATAS_PENDAFTARAN = 50;
 const JENDELA_MS = 15 * 60 * 1000;
 const percobaanDaftar = new Map<string, { jumlah: number; mulai: number }>();
 
