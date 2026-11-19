@@ -1,14 +1,12 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Clock } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { StatusPill } from "@/components/dashboard/StatusPill";
-import { waktuRelatif, koordinat } from "@/lib/format";
+import { koordinat } from "@/lib/format";
 import type { Perangkat } from "@/types";
 
 type PerangkatDaya = Perangkat & {
@@ -343,15 +341,14 @@ export default function BateraiPage() {
             <>
               <div className="overflow-auto md:max-h-[max(260px,calc(100vh-400px))] [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:bg-secondary-soft">
 
-                <table className="tabel-kartu w-full min-w-[1120px] table-fixed">
+                <table className="tabel-kartu w-full min-w-[960px] table-fixed">
 
                   <colgroup>
-                    <col style={{ width: "15%" }} />
-                    <col style={{ width: "18%" }} />
+                    <col style={{ width: "20%" }} />
+                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "16%" }} />
                     <col style={{ width: "14%" }} />
-                    <col style={{ width: "12%" }} />
-                    <col style={{ width: "26%" }} />
-                    <col style={{ width: "15%" }} />
+                    <col style={{ width: "28%" }} />
                   </colgroup>
 
                   <thead>
@@ -375,10 +372,6 @@ export default function BateraiPage() {
 
                       <th scope="col" className="px-6 py-3">
                         Lama menyala
-                      </th>
-
-                      <th scope="col" className="px-6 py-3">
-                        Data daya terakhir
                       </th>
 
                     </tr>
@@ -436,15 +429,9 @@ export default function BateraiPage() {
                             data-label="Lokasi terakhir"
                             className="px-6 py-3"
                           >
-                            <div className="text-[15px]">
-                              {p.lokasi_terakhir ?? "Belum ada lokasi"}
+                            <div className="data text-[15px]">
+                              {titik ?? "Belum ada lokasi"}
                             </div>
-
-                            {titik && (
-                              <div className="data text-[13px] text-text-secondary">
-                                {titik}
-                              </div>
-                            )}
                           </td>
 
                           {/* STATUS DAYA */}
@@ -492,27 +479,6 @@ export default function BateraiPage() {
                                   Data terakhir tercatat
                                 </div>
                               )}
-                          </td>
-
-                          {/* DATA DAYA TERAKHIR */}
-
-                          <td
-                            data-label="Data daya terakhir"
-                            className="px-6 py-3"
-                          >
-                            <div className="flex items-center gap-2 text-[15px]">
-                              <Clock
-                                size={16}
-                                strokeWidth={2}
-                                className="flex-none text-text-secondary"
-                              />
-
-                              {p.daya_updated_at
-                                ? waktuRelatif(
-                                    p.daya_updated_at
-                                  )
-                                : "Belum ada data"}
-                            </div>
                           </td>
 
                         </tr>

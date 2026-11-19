@@ -3,7 +3,7 @@
 
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Archive, ArchiveRestore, ArrowLeft, Check, Inbox, Send } from "lucide-react";
+import { AlertTriangle, Archive, ArchiveRestore, ArrowLeft, Check, Inbox } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -14,7 +14,7 @@ import { useSession, inisialNama } from "@/hooks/useSession";
 import { jamWIB, waktuRelatif } from "@/lib/format";
 import type { Notifikasi } from "@/types";
 import { DetailInsiden } from "./DetailInsiden";
-import { RONA_INISIAL, RONA_STATUS, TEKS_STATUS, ringkasKirim } from "./status";
+import { RONA_INISIAL, RONA_STATUS, TEKS_STATUS } from "./status";
 
 type Saringan = "SEMUA" | "AKTIF" | "DITANGANI" | "SELESAI";
 
@@ -219,8 +219,6 @@ export default function NotifikasiPage() {
     SELESAI: daftar.filter((n) => n.status === "SELESAI").length,
   };
 
-  const gagalKirim = daftar.filter((n) => ringkasKirim(n.notifikasi_delivery).gagal.length > 0).length;
-
   const selesai = daftar.filter((n) => n.status === "SELESAI");
   const idBersih = pilihBersih.filter((id) => selesai.some((n) => n.id_notifikasi === id));
   const semuaBersih = selesai.length > 0 && idBersih.length === selesai.length;
@@ -276,7 +274,7 @@ export default function NotifikasiPage() {
       {judul}
 
       <div className="flex flex-col gap-5">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <StatCard
             label="SOS aktif"
             value={jumlah.AKTIF}
@@ -288,12 +286,6 @@ export default function NotifikasiPage() {
             value={jumlah.SELESAI}
             tone="success"
             icon={<Check size={22} strokeWidth={2.2} />}
-          />
-          <StatCard
-            label="Pengiriman WhatsApp gagal"
-            value={gagalKirim}
-            tone="soft"
-            icon={<Send size={22} strokeWidth={2.2} />}
           />
         </div>
 
